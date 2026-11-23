@@ -1,0 +1,9 @@
+.runtime/
+dist/
+.agent-state/
+.DS_Store
+node_modules/
+output/
+.env
+.env.*
+!.env.example

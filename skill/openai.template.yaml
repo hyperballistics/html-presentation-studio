@@ -1,0 +1,7 @@
+interface:
+  display_name: "HTML Presentation Studio"
+  short_description: "Create and verify portable HTML slide workspaces"
+  default_prompt: "Use $html-presentation-studio to create or edit a portable HTML presentation workspace."
+
+policy:
+  allow_implicit_invocation: true

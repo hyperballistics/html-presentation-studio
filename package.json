@@ -1,0 +1,34 @@
+{
+  "name": "html-general-dev",
+  "version": "0.6.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node tools/serve.mjs",
+    "check": "node tools/check.mjs",
+    "test": "node --test tools/workspace.test.mjs",
+    "new": "node tools/new-page.mjs",
+    "agent": "node tools/agent.mjs",
+    "history": "node tools/version.mjs",
+    "context": "node tools/context-cli.mjs",
+    "export": "node tools/export.mjs"
+  },
+  "files": [
+    ".gitignore",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "README.md",
+    "CONSTITUTION.md",
+    "STORYLINE.md",
+    "agents",
+    "skill",
+    "deck.manifest.json",
+    "sections",
+    "templates",
+    "tools",
+    "workbench"
+  ]
+}

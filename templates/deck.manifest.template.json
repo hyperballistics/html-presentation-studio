@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "title": "【演示标题】",
+  "sections": [
+    {
+      "id": "overview",
+      "title": "【分节标题】",
+      "context": "sections/overview/section.md",
+      "pages": [
+        {
+          "id": "p01-overview",
+          "title": "【页面标题】",
+          "file": "sections/overview/pages/p01-overview.html"
+        }
+      ]
+    }
+  ]
+}

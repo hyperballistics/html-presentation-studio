@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>HTML Studio · 演示工作台</title><link rel="stylesheet" href="/fonts.css"><link rel="stylesheet" href="/style.css"><script type="module" src="/app.mjs"></script></head>
+<body>
+<svg class="icon-library" width="0" height="0" aria-hidden="true" focusable="false">
+  <symbol id="icon-studio" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M3.5 9h17m-11 0v10"/></symbol>
+  <symbol id="icon-play" viewBox="0 0 24 24"><path d="m9 5 11 7-11 7z"/></symbol>
+  <symbol id="icon-export" viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M5 15v5h14v-5"/></symbol>
+  <symbol id="icon-undo" viewBox="0 0 24 24"><path d="M9 5 4 10l5 5m-5-5h10a5 5 0 0 1 5 5v3"/></symbol>
+  <symbol id="icon-redo" viewBox="0 0 24 24"><path d="m15 5 5 5-5 5m5-5H10a5 5 0 0 0-5 5v3"/></symbol>
+  <symbol id="icon-text" viewBox="0 0 24 24"><path d="M5 7V5h14v2m-7-2v14m-4 0h8"/></symbol>
+  <symbol id="icon-rect" viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="2"/></symbol>
+  <symbol id="icon-ellipse" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/></symbol>
+  <symbol id="icon-arrow" viewBox="0 0 24 24"><path d="m5 19 14-14m-8 0h8v8"/></symbol>
+  <symbol id="icon-forward" viewBox="0 0 24 24"><path d="m8 8 4-4 4 4m-4-4v11M5 20h14"/></symbol>
+  <symbol id="icon-backward" viewBox="0 0 24 24"><path d="m8 16 4 4 4-4m-4 4V9M5 4h14"/></symbol>
+  <symbol id="icon-sample" viewBox="0 0 24 24"><path d="m13 7 4 4M9 11l4-4 3-3a2.1 2.1 0 0 1 3 3l-3 3-7 7H6v-3zm-3 6-2 2"/></symbol>
+  <symbol id="icon-brush" viewBox="0 0 24 24"><path d="m10 14 7-9c1.5-2 4-.3 3 1.6l-5.5 10M10 14c-4-1-4 3-6 5 4 1 8 0 10.5-2.4z"/></symbol>
+  <symbol id="icon-save" viewBox="0 0 24 24"><path d="M5 4h12l3 3v13H4V4zm3 0v6h8V4m-8 16v-6h8v6"/></symbol>
+  <symbol id="icon-sync" viewBox="0 0 24 24"><path d="M4 10a8 8 0 0 1 13.7-4L20 9m0-5v5h-5m5 5a8 8 0 0 1-13.7 4L4 15m0 5v-5h5"/></symbol>
+</svg>
+<div id="edit-ui">
+<header class="topbar">
+  <div class="brand"><span class="logo" aria-hidden="true"><svg class="ui-icon"><use href="#icon-studio"/></svg></span><div><h1>HTML Studio</h1><span>编辑模式</span></div></div>
+  <div class="top-actions" id="top-actions" inert>
+    <span id="save-status" class="save-status" role="status">连接中…</span>
+    <div class="delivery-actions" role="group" aria-label="审阅与导出">
+      <button type="button" id="present"><svg class="ui-icon" aria-hidden="true"><use href="#icon-play"/></svg>播放</button>
+      <button type="button" id="export" aria-haspopup="dialog"><svg class="ui-icon" aria-hidden="true"><use href="#icon-export"/></svg>导出 HTML</button>
+      <button type="button" id="edit-export-pdf" aria-haspopup="dialog"><svg class="ui-icon" aria-hidden="true"><use href="#icon-export"/></svg>导出 PDF</button>
+    </div>
+  </div>
+</header>
+<div id="banner" role="alert" hidden></div>
+<div class="ribbon" id="ribbon" inert>
+  <div class="edit-tools" id="edit-tools" role="toolbar" aria-label="对象编辑" aria-controls="slide" focusgroup="toolbar wrap">
+    <div class="tool-group" role="group" aria-label="历史">
+      <button type="button" id="undo" aria-disabled="true" aria-label="撤销" title="撤销 (Ctrl/⌘+Z)"><svg class="ui-icon" aria-hidden="true"><use href="#icon-undo"/></svg></button>
+      <button type="button" id="redo" aria-disabled="true" aria-label="重做" title="重做 (Ctrl/⌘+Shift+Z)"><svg class="ui-icon" aria-hidden="true"><use href="#icon-redo"/></svg></button>
+    </div>
+    <div class="tool-group" role="group" aria-label="插入">
+      <span class="tool-separator" role="separator" aria-orientation="vertical"></span>
+      <button type="button" id="add-text"><svg class="ui-icon" aria-hidden="true"><use href="#icon-text"/></svg>文本框</button>
+      <button type="button" id="add-rect"><svg class="ui-icon" aria-hidden="true"><use href="#icon-rect"/></svg>矩形</button>
+      <button type="button" id="add-ellipse"><svg class="ui-icon" aria-hidden="true"><use href="#icon-ellipse"/></svg>圆形</button>
+      <button type="button" id="add-arrow"><svg class="ui-icon" aria-hidden="true"><use href="#icon-arrow"/></svg>箭头</button>
+    </div>
+    <div class="tool-group" role="group" aria-label="对象操作">
+      <span class="tool-separator" role="separator" aria-orientation="vertical"></span>
+      <button type="button" id="duplicate">复制对象</button><button type="button" id="raise" class="compact-tool" title="上移一层" aria-label="上移一层"><svg class="ui-icon" aria-hidden="true"><use href="#icon-forward"/></svg><span>上移一层</span></button><button type="button" id="lower" class="compact-tool" title="下移一层" aria-label="下移一层"><svg class="ui-icon" aria-hidden="true"><use href="#icon-backward"/></svg><span>下移一层</span></button><button type="button" id="delete" aria-keyshortcuts="Backspace Delete">删除</button>
+    </div>
+    <div class="tool-group" role="group" aria-label="组合">
+      <span class="tool-separator" role="separator" aria-orientation="vertical"></span>
+      <button type="button" id="group-selection" title="组合 (Ctrl/⌘+G)">组合</button><button type="button" id="ungroup-selection" title="取消组合 (Ctrl/⌘+Shift+G)">取消组合</button>
+    </div>
+    <div class="tool-group" role="group" aria-label="格式刷">
+      <span class="tool-separator" role="separator" aria-orientation="vertical"></span>
+      <button type="button" id="paint" class="compact-tool" title="取格式" aria-label="取格式"><svg class="ui-icon" aria-hidden="true"><use href="#icon-sample"/></svg><span>取格式</span></button><button type="button" id="apply-paint" class="compact-tool" title="刷格式" aria-label="刷格式"><svg class="ui-icon" aria-hidden="true"><use href="#icon-brush"/></svg><span>刷格式</span></button>
+    </div>
+  </div>
+  <div class="document-tools">
+    <div class="ribbon-save" role="group" aria-label="保存与同步">
+      <button type="button" id="save" class="primary" aria-disabled="true" aria-haspopup="dialog" title="写回源文件 (Ctrl/⌘+S)"><svg class="ui-icon" aria-hidden="true"><use href="#icon-save"/></svg>写回源文件</button>
+      <button type="button" id="sync-context" aria-disabled="true"><svg class="ui-icon" aria-hidden="true"><use href="#icon-sync"/></svg>同步上下文</button>
+    </div>
+    <p id="context-status" role="status" aria-atomic="true"></p>
+  </div>
+</div>
+<main class="workspace" id="workspace" inert>
+  <aside id="left-panel" class="left-panel" aria-label="页面和图层">
+    <div class="panel-title sidebar-header"><h2>大纲</h2><button type="button" class="fold" id="toggle-left" aria-controls="left-content" aria-expanded="true" aria-label="收起大纲" title="收起大纲"><span aria-hidden="true"></span></button></div>
+    <div id="left-content" class="outline-body">
+      <details id="page-group" class="outline-section" open>
+        <summary><span>页码</span><span class="chip" id="page-count">01</span></summary>
+        <div class="outline-tools"><button type="button" id="add-section">＋ 分节</button></div>
+        <nav id="outline" class="outline" aria-label="页面清单"></nav>
+      </details>
+      <details id="layer-group" class="outline-section" open>
+        <summary><span>图层</span><span class="chip" id="layer-count"></span></summary>
+        <ol id="layers" class="layers"></ol>
+      </details>
+    </div>
+  </aside>
+  <section class="editor" aria-label="页面画布">
+    <header class="editor-meta">
+      <div class="canvas-title"><span id="page-badge" class="chip">01</span><h2 id="page-title">加载页面</h2></div>
+      <div class="canvas-controls">
+        <div class="format-controls" role="group" aria-label="页面尺寸">
+          <select id="page-format" aria-label="页面规格" title="页面规格"></select>
+          <select id="page-orientation" aria-label="纸张方向" title="纸张方向" hidden><option value="portrait">纵向</option><option value="landscape">横向</option></select>
+        </div>
+        <div class="zoom-controls" role="group" aria-label="画布缩放">
+          <button type="button" id="zoom-out" aria-label="缩小画布" title="缩小">−</button>
+          <button type="button" id="zoom" title="恢复 100%" aria-label="恢复 100%" aria-pressed="false">100%</button>
+          <button type="button" id="zoom-in" aria-label="放大画布" title="放大">＋</button>
+          <button type="button" id="zoom-fit" title="适合窗口" aria-label="适合窗口" aria-pressed="true">适合</button>
+        </div>
+      </div>
+    </header>
+    <div class="stage" id="stage"><div class="frame" id="frame"><div id="slide" class="slide" tabindex="-1" aria-label="编辑画布"></div></div></div>
+    <div class="panel-splitter" id="resize-left" role="separator" aria-label="大纲宽度" aria-orientation="vertical" aria-controls="left-panel" tabindex="0"></div>
+    <div class="panel-splitter" id="resize-right" role="separator" aria-label="属性宽度" aria-orientation="vertical" aria-controls="right-panel" tabindex="0"></div>
+    <details class="notes"><summary>讲者备注</summary><label class="sr" for="notes">讲者备注</label><textarea id="notes" maxlength="4000" rows="2"></textarea></details>
+  </section>
+  <aside id="right-panel" class="right-panel" aria-label="属性">
+    <div class="panel-title sidebar-header"><h2>属性</h2><button type="button" class="fold" id="toggle-right" aria-controls="properties" aria-expanded="true" aria-label="收起属性" title="收起属性"><span aria-hidden="true"></span></button></div>
+    <div id="properties" class="panel-body">
+      <div class="object-header"><span class="object-symbol" id="object-type" aria-hidden="true">T</span><div><h2 id="object-name">页面</h2><code id="object-id"></code></div></div>
+      <details class="animation-panel">
+        <summary>动画</summary>
+        <fieldset><legend>切换动画</legend><label class="sr" for="page-effect">页面切换效果</label><select id="page-effect"><option value="">无</option><option value="fade">淡入</option><option value="slide">滑入</option><option value="zoom">缩放进入</option></select></fieldset>
+        <fieldset><legend>点击动画</legend><label class="sr" for="object-effect">所选对象点击效果</label><select id="object-effect"><option value="">无</option><option value="appear">直接出现</option><option value="fade">淡入</option><option value="rise">上浮进入</option><option value="zoom">缩放进入</option><option value="mixed" disabled>多个步骤或效果</option></select><span id="reveal-order" class="chip" hidden></span></fieldset>
+      </details>
+      <div id="page-fields"><div class="field"><label for="swatch-background">页面背景</label><div class="swatch"><input type="color" id="swatch-background"><button type="button" data-pick="background" aria-label="吸取页面背景">取色</button></div></div></div>
+      <fieldset id="selection-fields" hidden><legend class="sr">选区位置与尺寸</legend>
+        <section class="group"><h3>选区位置与尺寸</h3><div class="pairs"><label class="field">X<input type="number" id="selection-x" step="1" min="0"></label><label class="field">Y<input type="number" id="selection-y" step="1" min="0"></label><label class="field">宽（等比）<input type="number" id="selection-w" step="1" min="0"></label><label class="field">高（等比）<input type="number" id="selection-h" step="1" min="0"></label></div></section>
+      </fieldset>
+      <span id="mixed-style" class="chip" hidden>部分样式值不同</span>
+      <fieldset id="object-fields" hidden><legend class="sr">对象属性</legend>
+        <section class="group"><h3>文本</h3><textarea id="object-text" aria-label="对象文本" data-prop="text" rows="2" maxlength="2000"></textarea>
+          <div class="pairs"><label class="field">字体<select data-prop="font"><option value="sans">默认混排</option><option value="han">思源黑体 SC</option><option value="serif">衬线</option><option value="mono">等宽</option></select></label><label class="field">字号<input type="number" data-prop="size" min="10" max="160" step="1"></label></div>
+          <div class="toggles" role="group" aria-label="字形"><button data-toggle="bold" aria-label="加粗" aria-pressed="false"><b>B</b></button><button data-toggle="italic" aria-label="斜体" aria-pressed="false"><i>I</i></button><button data-toggle="underline" aria-label="下划线" aria-pressed="false"><u>U</u></button></div>
+          <div class="pairs"><label class="field">对齐<select data-prop="align"><option value="left">左对齐</option><option value="center">居中</option><option value="right">右对齐</option></select></label><label class="field">行距<select data-prop="line"><option>1.1</option><option>1.25</option><option>1.4</option><option>1.6</option></select></label></div>
+        </section>
+        <section class="group" id="object-geometry"><h3>位置与尺寸</h3><div class="pairs"><label class="field">X<input type="number" data-prop="x" min="0" step="1"></label><label class="field">Y<input type="number" data-prop="y" min="0" step="1"></label><label class="field">宽<input type="number" data-prop="w" min="24" step="1"></label><label class="field">高<input type="number" data-prop="h" min="24" step="1"></label></div></section>
+        <section class="group"><h3>文字与填充</h3><div class="pairs"><div class="field"><label for="swatch-color">文字色</label><div class="swatch"><input type="color" id="swatch-color" data-prop="color"><button type="button" data-pick="color" aria-label="吸取文字色">取色</button></div></div><div class="field"><label for="swatch-fill">填充色</label><div class="swatch"><input type="color" id="swatch-fill" data-prop="fill"><button type="button" data-pick="fill" aria-label="吸取填充色">取色</button></div></div><label class="field inline"><input id="transparent" type="checkbox"> 无填充</label><label class="field">内边距 (px)<input type="number" data-prop="inset" min="0" max="80" step="1"></label></div></section>
+        <section class="group"><h3>形状边框</h3><div class="pairs"><div class="field"><label for="swatch-borderColor">边框色</label><div class="swatch"><input type="color" id="swatch-borderColor" data-prop="borderColor"><button type="button" data-pick="borderColor" aria-label="吸取边框色">取色</button></div></div><label class="field">边框粗细 (px)<input type="number" data-prop="borderWidth" min="0" max="24" step="1"></label><label class="field" id="radius-row">圆角 (px)<input type="number" data-prop="radius" min="0" max="360" step="1"></label></div></section>
+      </fieldset>
+      <fieldset id="arrow-fields" hidden><legend class="sr">箭头属性</legend>
+        <section class="group"><h3>线条</h3><div class="pairs"><div class="field"><label for="swatch-stroke">箭头线色</label><div class="swatch"><input type="color" id="swatch-stroke" data-prop="stroke"><button type="button" data-pick="stroke" aria-label="吸取箭头线色">取色</button></div></div><label class="field">线条粗细 (px)<input type="number" data-prop="strokeWidth" min="1" max="24" step="1"></label></div></section>
+        <section class="group" id="from-fields"><h3>起点</h3><label class="field">起点连接对象<select id="from-target"></select></label>
+          <label class="field" id="from-side-row" hidden>起点锚点<select id="from-side"><option value="top">上</option><option value="right">右</option><option value="bottom">下</option><option value="left">左</option></select></label>
+          <div class="pairs" id="from-coords"><label class="field">起点 X<input id="from-x" type="number" min="0" step="1"></label><label class="field">起点 Y<input id="from-y" type="number" min="0" step="1"></label></div>
+        </section>
+        <section class="group" id="to-fields"><h3>终点</h3><label class="field">终点连接对象<select id="to-target"></select></label>
+          <label class="field" id="to-side-row" hidden>终点锚点<select id="to-side"><option value="top">上</option><option value="right">右</option><option value="bottom">下</option><option value="left">左</option></select></label>
+          <div class="pairs" id="to-coords"><label class="field">终点 X<input id="to-x" type="number" min="0" step="1"></label><label class="field">终点 Y<input id="to-y" type="number" min="0" step="1"></label></div>
+        </section>
+      </fieldset>
+    </div>
+  </aside>
+</main>
+<footer class="statusbar"><section class="footer-paths" aria-label="文件位置"><code id="file-path"></code><p id="export-location" role="status" hidden><span id="export-label">导出根目录</span> · <code id="export-path"></code></p></section><div><span id="overflow"></span> <span id="studio-version"></span></div></footer>
+<dialog id="outline-dialog" aria-labelledby="outline-title">
+  <h2 id="outline-title"></h2>
+  <form id="outline-form">
+    <label id="outline-name-field" class="field">名称<input id="outline-name" maxlength="80" required autofocus></label>
+    <p id="outline-status" role="status"></p>
+    <div class="dialog-actions"><button type="button" id="outline-cancel">取消</button><button class="primary" id="outline-submit" type="submit">确认</button></div>
+  </form>
+</dialog>
+<dialog id="review-dialog" aria-labelledby="review-title"><h2 id="review-title">核对变更</h2><pre id="diff" tabindex="0" aria-label="变更明细"></pre><div class="dialog-actions"><button id="cancel-review">取消</button><button class="primary" id="approve">确认</button></div><p id="dialog-status" role="status"></p></dialog>
+
+<dialog id="conflict-dialog" aria-labelledby="conflict-title"><h2 id="conflict-title">源文件比草稿更新</h2><div class="dialog-actions"><button id="cancel-conflict">取消</button><button id="recover" aria-haspopup="dialog" class="primary">导出草稿并载入源文件</button></div></dialog>
+</div>
+<main id="player" class="player" aria-label="播放模式" hidden>
+  <div id="present-stage" class="present-stage" tabindex="-1"><div id="present-frame" class="frame"><div id="present-slide" class="slide" aria-label="当前幻灯片"></div></div></div>
+  <button type="button" id="exit-fullscreen" title="退出全屏" aria-label="退出全屏">⤢</button>
+  <p id="play-status" class="play-status" role="status" hidden></p>
+  <footer class="play-controls">
+    <button type="button" id="close-present" title="返回编辑 (Esc)">返回编辑</button>
+    <div class="play-nav" role="group" aria-label="翻页"><button type="button" id="prev-page" aria-label="上一页" title="上一页 (←)">‹</button><span id="play-index" aria-live="polite"></span><button type="button" id="next-page" aria-label="下一页" title="下一页 (→)">›</button></div>
+    <div class="play-actions"><button type="button" id="reveal-next" hidden>下一动画</button><button type="button" id="fullscreen" title="全屏 (F)" aria-keyshortcuts="F">全屏</button><button type="button" id="export-pdf" aria-haspopup="dialog">导出 PDF</button></div>
+  </footer>
+</main>
+<dialog id="export-dialog" aria-labelledby="export-title">
+  <h2 id="export-title"></h2>
+  <form method="dialog">
+    <div class="export-choices">
+      <button type="button" id="choose-export-file" class="primary" autofocus>选择保存位置…</button>
+      <button value="root" id="choose-export-root" aria-describedby="export-root-choice" hidden>保存到导出根目录</button>
+      <code id="export-root-choice" hidden></code>
+      <button value="download" id="choose-export-download">浏览器下载</button>
+    </div>
+    <p id="export-dialog-status" role="status" hidden></p>
+    <div class="dialog-actions"><button value="cancel" id="cancel-export">取消</button></div>
+  </form>
+</dialog>
+<div id="print-deck" aria-hidden="true"></div>
+<div class="sr" id="announcement" role="status"></div>
+</body></html>
