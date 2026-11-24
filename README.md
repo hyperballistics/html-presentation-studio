@@ -22,7 +22,20 @@ npm test                      # 用临时副本验证协议，不改示例
 | [tools/](tools/) | 本地服务、命令行工具和测试 |
 | [workbench/](workbench/) | 浏览器工作台、模型渲染和字体资产 |
 
-各受版本控制的目录用 `README.md` 说明用途、主要内容和维护边界。新增长期维护的目录时，沿用这三个标题并更新上一级入口。Git 操作按 [Agent Git 维护原则](agents/git.md) 执行。
+目录的 `README.md` 逐项列出本目录受 Git 跟踪的文件。新增或更名文件时，同步更新对应说明。新增长期维护的目录时，沿用「用途」「主要内容」「维护边界」并更新上一级入口。Git 操作按 [Agent Git 维护原则](agents/git.md) 执行。
+
+### 根目录文件
+
+| 文件 | 说明 |
+|---|---|
+| [`.gitignore`](.gitignore) | 排除本机状态、依赖、生成产物和环境配置文件。 |
+| [`AGENTS.md`](AGENTS.md) | 项目级 Agent 入口，按任务指向应读取的规则和数据。 |
+| [`CLAUDE.md`](CLAUDE.md) | 将 Claude Code 路由到共用的 `AGENTS.md`。 |
+| [`CONSTITUTION.md`](CONSTITUTION.md) | 定义源文件、草稿、写回、历史和导出必须遵守的项目约定。 |
+| [`README.md`](README.md) | 介绍如何运行、编辑、导出和复用工作区，并提供仓库导航。 |
+| [`STORYLINE.md`](STORYLINE.md) | 按页记录当前演示的内容、作用及前后承接。 |
+| [`deck.manifest.json`](deck.manifest.json) | 登记当前演示的分节、页序、页面 ID 和实体路径。 |
+| [`package.json`](package.json) | 定义 Node.js 版本要求、命令入口和发行包文件范围。 |
 
 ## 试一页
 

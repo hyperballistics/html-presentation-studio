@@ -10,14 +10,12 @@
 
 按任务组织的补充说明见[参考模板目录](references/)。
 
-| 文件 | 作用 | 读取时机 |
-|---|---|---|
-| [`SKILL.template.md`](SKILL.template.md) | 第一层入口：触发边界、核心不变量和任务路由 | 构建 Skill 时复制并改名为 `SKILL.md` |
-| [`openai.template.yaml`](openai.template.yaml) | Codex UI 元数据与自动/显式调用策略 | 构建 Skill 时复制并改名为 `agents/openai.yaml` |
-| [`SHARING.template.md`](SHARING.template.md) | Skill 配置、调用、渐进披露、打包与验收规则 | 维护或分享 Skill 本身时 |
-| [`references/new-workspace.template.md`](references/new-workspace.template.md) | 从模板创建任务自有工作区 | 只有新工作区任务触发 |
-| [`references/operations.template.md`](references/operations.template.md) | 命令与故障处理补充 | 目标工作区自身文档不足时 |
-| [`references/verification.template.md`](references/verification.template.md) | 浏览器与导出视觉验收 | UI、布局或导出需要人工/浏览器检查时 |
+| 文件 | 说明 |
+|---|---|
+| [`README.md`](README.md) | 索引 Skill 配置与参考模板，说明构建和验收方法。 |
+| [`SHARING.template.md`](SHARING.template.md) | 规定 Skill 配置、调用、渐进披露、打包与验收，维护或分享 Skill 时使用。 |
+| [`SKILL.template.md`](SKILL.template.md) | 定义触发边界、核心约定和任务路由，构建时复制为 `SKILL.md`。 |
+| [`openai.template.yaml`](openai.template.yaml) | 配置 Codex UI 元数据与调用策略，构建时复制为 `agents/openai.yaml`。 |
 
 ## 维护边界
 

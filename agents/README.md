@@ -6,7 +6,13 @@
 
 ## 主要内容
 
-[交接协议](protocol.md)、[设计标准](design.md)、[部署说明](deployment.md)、[Agent Git 维护原则](git.md)。
+| 文件 | 说明 |
+|---|---|
+| [`README.md`](README.md) | 索引本目录的协议、规范和维护文档。 |
+| [`deployment.md`](deployment.md) | 说明如何打包工作区并在其他 Agent 客户端运行。 |
+| [`design.md`](design.md) | 定义默认主题、视觉标准和随包字体的分发要求。 |
+| [`git.md`](git.md) | 规定 Agent 的分支选择、提交审阅、推送验证及回退边界。 |
+| [`protocol.md`](protocol.md) | 约定单对象编辑请求、JSON 提案和人工采纳流程。 |
 
 ## 维护边界
 

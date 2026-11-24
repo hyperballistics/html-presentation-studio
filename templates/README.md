@@ -6,7 +6,12 @@
 
 ## 主要内容
 
-[清单](deck.manifest.template.json)、[叙事索引](STORYLINE.template.md)和[分节说明](section.template.md)模板。
+| 文件 | 说明 |
+|---|---|
+| [`README.md`](README.md) | 索引新工作区的初始化模板并指向复用步骤。 |
+| [`STORYLINE.template.md`](STORYLINE.template.md) | 提供新演示的叙事索引和逐页承接表样板。 |
+| [`deck.manifest.template.json`](deck.manifest.template.json) | 提供分节与页面注册结构的清单样板。 |
+| [`section.template.md`](section.template.md) | 提供分节受众、目的、保留条件和来源边界的样板。 |
 
 ## 维护边界
 

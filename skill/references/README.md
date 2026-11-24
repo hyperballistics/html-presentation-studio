@@ -6,7 +6,12 @@
 
 ## 主要内容
 
-[新建工作区](new-workspace.template.md)、[操作与排查](operations.template.md)、[视觉验收](verification.template.md)。
+| 文件 | 说明 |
+|---|---|
+| [`README.md`](README.md) | 索引按任务读取的 Skill 参考模板。 |
+| [`new-workspace.template.md`](new-workspace.template.md) | 说明如何从发行模板创建并验证独立工作区。 |
+| [`operations.template.md`](operations.template.md) | 补充工作区命令、上下文同步和故障处理。 |
+| [`verification.template.md`](verification.template.md) | 规定结构检查、浏览器检查与导出视觉验收的边界。 |
 
 ## 维护边界
 
