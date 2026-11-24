@@ -57,6 +57,10 @@ function banner(message, retry=false) {
 function contextStatus(text,warn=false) {
   const el=$('context-status');el.classList.toggle('warn',warn);el.textContent=text;
 }
+function adjacentPage(offset) {
+  const index=pageList.findIndex(p=>p.id===model?.id);
+  return index<0?undefined:pageList[index+offset];
+}
 function refreshStatus() {
   if (stale) status('版本冲突 · 草稿保留',true);
   else if (!storageOK && dirty()) status('草稿未持久化',true);
@@ -64,6 +68,8 @@ function refreshStatus() {
   else status('与源文件一致');
   toolDisabled('save',!model||!dirty()||stale||busy);
   toolDisabled('sync-context',!model||busy);
+  $('edit-prev-page').disabled=busy||!adjacentPage(-1);
+  $('edit-next-page').disabled=busy||!adjacentPage(1);
 }
 function persist() {
   try {
@@ -652,9 +658,17 @@ function update(changes,key='',skip=null,draw=true) {
   });
   commit({...model,objects},key?`${multiKey()}:${key}`:'',skip,draw);
 }
-async function openPage(id,recover=false) {
+function turnEditorPage(offset) {
+  if(busy||pointer||layerDrag||pageDrag)return;
+  const page=adjacentPage(offset);
+  if(page)void openPage(page.id,{selectDefault:false});
+}
+action('edit-prev-page',()=>turnEditorPage(-1));
+action('edit-next-page',()=>turnEditorPage(1));
+async function openPage(id,{recover=false,selectDefault=true}={}) {
   if(busy)return;
-  busy=true; if(model&&!recover) persist();
+  busy=true;
+  if(model&&!recover)persist();else refreshStatus();
   try {
     const result=await api(endpoint(id));
     if(recover) {
@@ -670,7 +684,7 @@ async function openPage(id,recover=false) {
     } catch {draft=null;storageOK=false;}
     source=result; draftBase=draft?.base||result.revision; model=draft?.model||result.model; forked=storageKey!==key;
     stale=!!draft&&draft.base!==source.revision&&dirty(); history=[];future=[];group='';sampling=null;
-    select(model.objects.length?[model.objects.find(o=>o.id==='hero-title')?.id||model.objects[0].id]:[],false);
+    select(selectDefault&&model.objects.length?[model.objects.find(o=>o.id==='hero-title')?.id||model.objects[0].id]:[],false);
     $('page-title').textContent=model.title;$('file-path').textContent=source.absolute_file??source.file;
     banner(stale?'已恢复旧版本草稿。源文件已更新，禁止直接覆盖。':'',stale);
     $('stage').scrollTo(0,0);drawOutline();render();
@@ -1042,7 +1056,13 @@ document.addEventListener('keydown',e=>{
     if(e.key.toLowerCase()==='g'){e.preventDefault();groupSelection(!e.shiftKey);}
     return;
   }
-  if(!selection.size)return;
+  if(!selection.size){
+    const offset=e.key==='ArrowLeft'?-1:e.key==='ArrowRight'?1:0;
+    if(offset&&!e.shiftKey&&!editToolbar.contains(e.target)&&!pageDrag){
+      if(adjacentPage(offset)){e.preventDefault();turnEditorPage(offset);}
+    }
+    return;
+  }
   const d=deltas[e.key];
   if(d&&!editToolbar.contains(e.target)){e.preventDefault();const s=e.shiftKey?10:1;transform({dx:d[0]*s,dy:d[1]*s},'nudge');}
   if(e.key==='Backspace'||e.key==='Delete'){e.preventDefault();remove();}
@@ -1275,7 +1295,7 @@ async function requestExport(format,{recover=false}={}){
     busy=false;refreshStatus();
     for(const button of buttons)button.disabled=false;
   }
-  if(recover&&saved){$('conflict-dialog').close();await openPage(snapshot.id,true);}
+  if(recover&&saved){$('conflict-dialog').close();await openPage(snapshot.id,{recover:true});}
 }
 action('export',()=>requestExport('html'));
 for(const id of ['edit-export-pdf','export-pdf'])action(id,()=>requestExport('pdf'));

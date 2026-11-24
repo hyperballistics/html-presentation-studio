@@ -69,9 +69,9 @@ button,input,textarea,select {font:inherit;color:inherit} button,input,select,te
 .outline-body,.panel-body{min-height:0;max-height:none;overflow:auto;overscroll-behavior:contain}.layers{max-height:none;overflow:visible}
 .editor-meta{min-height:43px;padding:6px 12px;gap:5px 10px;flex-wrap:wrap;background:#f8fafc;border-bottom:1px solid var(--line)}
 .canvas-title{flex:1 1 auto;min-width:0}.canvas-title h2{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.canvas-controls,.format-controls,.zoom-controls{display:flex;align-items:center;gap:4px}.canvas-controls{flex-wrap:wrap;gap:5px 10px}
+.canvas-controls,.page-controls,.format-controls,.zoom-controls{display:flex;align-items:center;gap:4px}.canvas-controls{flex-wrap:wrap;gap:5px 10px}
 .canvas-controls button,.canvas-controls select{min-height:30px;font-size:12px;padding:2px 7px}.canvas-controls select{width:auto;max-width:160px}
-.zoom-controls button{min-width:30px}.zoom-controls button[aria-pressed=true]{background:var(--soft);border-color:#9bbad1;color:#0b2545}
+.page-controls button,.zoom-controls button{min-width:30px}.zoom-controls button[aria-pressed=true]{background:var(--soft);border-color:#9bbad1;color:#0b2545}
 #zoom{min-width:52px;font-variant-numeric:tabular-nums}
 #stage{min-height:0;contain:size}
 .notes{padding:0 16px 0}.notes summary{cursor:pointer;font-size:12px;font-weight:600;padding:8px 0;color:#173b59}.notes textarea{margin-bottom:10px}

@@ -84,6 +84,10 @@
     <header class="editor-meta">
       <div class="canvas-title"><span id="page-badge" class="chip">01</span><h2 id="page-title">加载页面</h2></div>
       <div class="canvas-controls">
+        <div class="page-controls" role="group" aria-label="编辑器翻页">
+          <button type="button" id="edit-prev-page" aria-label="上一页" title="上一页" disabled>←</button>
+          <button type="button" id="edit-next-page" aria-label="下一页" title="下一页" disabled>→</button>
+        </div>
         <div class="format-controls" role="group" aria-label="页面尺寸">
           <select id="page-format" aria-label="页面规格" title="页面规格"></select>
           <select id="page-orientation" aria-label="纸张方向" title="纸张方向" hidden><option value="portrait">纵向</option><option value="landscape">横向</option></select>
