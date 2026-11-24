@@ -1,15 +1,39 @@
 # HTML Studio：可移植的 HTML 演示工作区
 
-把工作区发行包解压到任意路径（也可复制发行文件），用 **Node.js 22+** 运行。应用没有第三方 npm 运行时依赖，不用 `npm install`，不依赖外部素材库、设计工作区或模型服务。
+## 运行前准备
 
-```sh
-npm start                     # 仅监听本机 127.0.0.1:4377
-npm start -- --port 4378       # 默认端口有冲突时
-npm run check                 # 校验清单、页实体和字体资产
-npm test                      # 用临时副本验证协议，不改示例
-```
+- **必需：Node.js 22 或更新版本。** 如果还没安装，请从 [Node.js 官网](https://nodejs.org/en/download)选择符合要求的 LTS 版本。启动命令使用 `npm`，通常随 Node.js 一起安装。安装后重新打开终端，确认下面两个命令都能输出版本，并且 `node` 的主版本号不低于 22：
 
-浏览器打开终端打印的地址。用工作台编辑时不要双击打开 `workbench/index.html`；示例实体或导出的 HTML 可以直接打开。默认使用包内定义的色板，英文和数字用 **Source Sans 3**，中文用 **思源黑体 SC**（字体及许可证都在包内）。导出 PDF 需要本地安装并配置受支持的 Chromium 浏览器。
+  ```sh
+  node -v
+  npm -v
+  ```
+
+  如果提示找不到命令，先确认 Node.js 和 npm 已安装并在终端的 `PATH` 中；如果 Node.js 版本低于 22，先升级或切换版本。
+- **必需：一个可打开本机网页的浏览器。** 用它打开工作台即可编辑、播放审阅和导出 HTML；它不必是下文用于 PDF 直出的浏览器。
+- **不用安装项目依赖。** 没有第三方 npm 运行时依赖，不用执行 `npm install`。字体随包提供，不用装到系统里。单独使用工作台不需要 Agent 客户端、Skill、MCP 或 API Key。
+
+### 首次启动
+
+1. 解压发行包或取得完整源码。在终端进入包含 `package.json` 的目录；用 npm 发行包时通常是解压后的 `package/`。
+2. 在该目录运行 `npm run check`，检查清单、页面与字体。通过后运行 `npm start`。
+3. 保持终端运行，用浏览器打开终端显示的地址（默认 `http://127.0.0.1:4377`）。不要双击打开 `workbench/index.html` 来启动编辑器。若 4377 被占用，可改用 `npm start -- --port 4378`，再打开新地址。服务只监听本机，不对局域网或公网开放。
+
+如果要写回源文件或同步上下文，请把项目放在当前用户可写的目录。开发者可另用 `npm test` 跑自动化测试；它不是启动前置步骤。
+
+### 可选：配置 PDF 直出
+
+内置「导出 PDF」的直出功能和命令行 PDF 导出都由 Studio 调用本机浏览器完成。只编辑、播放或导出 HTML 时，可以跳过这一步。将下列任一受支持的浏览器装在对应位置，程序就会自动查找：
+
+| 系统 | 自动查找的浏览器位置 |
+|---|---|
+| macOS | 在 `/Applications` 和 `~/Applications` 下查找 `Google Chrome.app`、`Microsoft Edge.app`、`Chromium.app` 中的 `Contents/MacOS/<浏览器名>`。 |
+| Windows | 在 `%ProgramFiles%`、`%ProgramFiles(x86)%`、`%LOCALAPPDATA%` 下查找 `Google/Chrome/Application/chrome.exe` 或 `Microsoft/Edge/Application/msedge.exe`（路径分隔符也可写为反斜杠）。 |
+| Linux | `/usr/bin/google-chrome`、`/usr/bin/chromium`、`/usr/bin/chromium-browser` 或 `/usr/bin/microsoft-edge`。 |
+
+当前不会搜索 `PATH`，也没有自定义 PDF 浏览器路径的配置项。如果终端报 `renderer-not-found` 或 `find-renderer`，先确认浏览器在上述位置，并且当前用户可访问和运行。只把浏览器加到 `PATH` 不会解决这个问题。
+
+可以用 `npm run export -- pdf --out ./studio-smoke.pdf` 测试直出，输出文件名必须尚不存在。不便安装时，可在工作台选择「导出 PDF」→「浏览器下载」，在回退的打印对话框选「保存为 PDF」；打印回退的纸型设置可能与直出不同。
 
 ## 仓库目录
 
@@ -173,7 +197,7 @@ npm run export -- pdf --out "./exports/deck.pdf"
 ```
 
 - HTML 以 `页ID.html` 一页一文件输出。整批共用 `fonts/`（含许可证）；`export-manifest.json` 最后写入，记录页序与哈希。搬运时保留整个目录。相同完整导出可重复执行且不改写；其他既有目录不覆盖。中断时 CLI 会给出目标绝对路径和失败原因；该目录可能留有未完成文件，不会自动清理，请另选目录重试。重试时会区分清单缺失或不同、文件缺失或哈希不匹配，以及读取错误。
-- PDF 合成一个文件，依赖本地支持的 Chromium 浏览器；目标须为新 `.pdf` 文件。渲染失败时在启动工作台的终端或 CLI 输出查看 `[PDF] stage=…` 和相关错误码、退出码或信号；浏览器不显示本机诊断细节。命令行失败时可用界面的打印回退，但须先确认草稿状态。
+- PDF 合成一个文件，依赖[本机 PDF 渲染器](#可选配置-pdf-直出)；目标须为新 `.pdf` 文件。渲染失败时在启动工作台的终端或 CLI 输出查看 `[PDF] stage=…` 和相关错误码、退出码或信号；浏览器不显示本机诊断细节。命令行失败时可用界面的打印回退，但须先确认草稿状态。
 - 两种命令都只读实体源，不读取浏览器草稿、不改项目，省略讲者备注。CLI 输出路径由人显式指定，不向浏览器或 Agent 提案开放任意路径写入能力。
 
 ## 保存、检查点和大版本

@@ -16,7 +16,7 @@
 
 ## 2. 在目标 Harness 中使用
 
-1. 安装 **Node.js 22+**。将 `.tgz` 解压到用户指定的**新空目录**（可用 `tar -xzf "<发行包路径>" -C "<目标目录>"`），不要向已有工作区合并解包。
+1. 按 [运行前准备](../README.md#运行前准备)安装并验证 **Node.js 22+** 和 npm。将 `.tgz` 解压到用户指定的**新空目录**（可用 `tar -xzf "<发行包路径>" -C "<目标目录>"`），不要向已有工作区合并解包。
 2. 在目标客户端打开解包后包含 `package.json` 和 `AGENTS.md` 的 `package/` 目录。在该目录中运行：
 
    ```sh
@@ -25,7 +25,7 @@
    npm start
    ```
 
-   校验失败则先停止，不启动服务。`context -- sync` 从已写回源重建本机事实索引，不确认叙事。工作台无需 `npm install`、MCP 或工作台 API Key；仅在本机回环地址运行一个服务实例。用浏览器打开终端打印的地址；内置 PDF 直出另需本机 Chromium。
+   校验失败则先停止，不启动服务。`context -- sync` 从已写回源重建本机事实索引，不确认叙事。工作台无需 `npm install`、MCP 或工作台 API Key；仅在本机回环地址运行一个服务实例。用浏览器打开终端打印的地址；需要 PDF 直出时，按 [PDF 浏览器查找说明](../README.md#可选配置-pdf-直出)核对本机安装位置。
 3. 按 [Agent 交接协议的客户端入口表](protocol.md)加载规则：Codex / OpenCode 使用 `AGENTS.md`；Claude Code 有 `CLAUDE.md` 转引；ZCode 显式让 Agent 读取 `AGENTS.md` 和 `agents/protocol.md`。自动加载不可用时，也可使用显式提示。确认 Agent 读到的是目标包，而非父目录或原工作区的规则。
 
 **验收分开记**：解包后的 `npm run check` / `npm test`、浏览器打开示例页、目标客户端实际加载规则是三件不同的事。未亲测的客户端不要记为已通过。
