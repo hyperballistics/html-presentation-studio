@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {mkdir,realpath} from 'node:fs/promises';
+import {mkdir,realpath,unlink} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {fileState,publish} from './storage.mjs';
 import {parseStoryline} from './storyline.mjs';
@@ -34,9 +34,9 @@ async function writeOutline(workspace,match,body,explicitId) {
     if(!explicitId&&match!==`"${revision(ws.manifestText)}"`)throw conflict();
     const manifest=JSON.parse(ws.manifestText), previous=pageIds(manifest), op=body?.op;
     const section=manifest.sections.find(s=>s.id===body?.section);
-    if(!['add-section','rename-section','remove-section','add-page','move-page'].includes(op))throw httpError(400,'大纲操作无效。');
+    if(!['add-section','rename-section','remove-section','add-page','move-page','remove-page'].includes(op))throw httpError(400,'大纲操作无效。');
     if(op!=='add-section'&&!section)throw httpError(404,'分节不存在。');
-    let title, added, inheritedFormat, newSection, affected=section?.id;
+    let title, added, removed, inheritedFormat, newSection, affected=section?.id;
     if(['add-section','rename-section','add-page'].includes(op)){
       title=typeof body.title==='string'?body.title.trim():'';
       if(!title||title.length>80||/[\x00-\x1f\x7f]/.test(title))throw httpError(400,'名称须为 1–80 字，不能换行。');
@@ -64,6 +64,14 @@ async function writeOutline(workspace,match,body,explicitId) {
         added={id,title,file};
         section.pages.push(added);affected=id;break;
       }
+      case 'remove-page': {
+        const index=section.pages.findIndex(p=>p.id===body.page);
+        if(index<0)throw httpError(404,'页面不在该分节。');
+        if(previous.length===1)throw httpError(409,'至少保留一页，不能删除最后一页。');
+        removed=await ws.read(body.page);
+        affected=body.page;
+        section.pages.splice(index,1);break;
+      }
       case 'move-page': {
         const from=section.pages.findIndex(p=>p.id===body.page), to=section.pages.findIndex(p=>p.id===body.target);
         if(from<0||to<0||typeof body.after!=='boolean')throw httpError(400,'只支持在同一分节内拖动页面。');
@@ -77,7 +85,7 @@ async function writeOutline(workspace,match,body,explicitId) {
     const backup=(kind,text,extension)=>publish(resolve(history,`${kind}.${revision(text).slice(7)}.${extension}`),text,{immutable:true});
     const storylinePath=resolve(ws.root,'STORYLINE.md');
     let story, nextStory;
-    if(op==='add-page'||op==='move-page'){
+    if(added||removed||op==='move-page'){
       story=(await fileState(storylinePath))?.text;
       if(!story)throw httpError(409,'缺少 STORYLINE.md，未更新页码。');
       nextStory=reorderStoryline(story,previous,pageIds(manifest),added);
@@ -98,9 +106,21 @@ async function writeOutline(workspace,match,body,explicitId) {
       await publish(target,html,{immutable:true});
       if((await fileState(target))?.text!==html)throw conflict();
     }
+    if(removed)await ws.backup(removed);
     if(nextStory!==undefined)await publish(storylinePath,nextStory,{expected:story,onConflict:conflict});
-    try {await publish(ws.manifestPath,JSON.stringify(manifest,null,2)+'\n',{expected:ws.manifestText,onConflict:conflict});}
-    catch(e){
+    const nextManifest=JSON.stringify(manifest,null,2)+'\n';
+    let manifestPublished=false;
+    try {
+      await publish(ws.manifestPath,nextManifest,{expected:ws.manifestText,onConflict:conflict});
+      manifestPublished=true;
+      // Unregister before unlinking: an interruption may leave an orphan, never a missing registered page.
+      if(removed){
+        const {full}=removed.page;
+        if(await realpath(full)!==full||(await fileState(full))?.text!==removed.html)throw conflict();
+        await unlink(full);
+      }
+    }catch(e){
+      if(manifestPublished)await publish(ws.manifestPath,ws.manifestText,{expected:nextManifest,onConflict:conflict});
       if(nextStory!==undefined)await publish(storylinePath,story,{expected:nextStory,onConflict:conflict});
       throw e;
     }

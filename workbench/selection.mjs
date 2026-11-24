@@ -12,6 +12,37 @@ export function selectionBounds(objects,ids){
   return {x,y,w:Math.max(...selected.map(r=>r.x+r.w))-x,h:Math.max(...selected.map(r=>r.y+r.h))-y};
 }
 
+// Existing groups move as units unless the selection consists of exactly one group.
+export function alignmentUnits(model,ids){
+  const groups=(model.groups??[]).filter(g=>g.every(id=>ids.has(id)));
+  const units=groups.length===1&&groups[0].length===ids.size?[]:groups.map(g=>new Set(g));
+  const grouped=new Set(units.flatMap(unit=>[...unit]));
+  for(const id of ids)if(!grouped.has(id))units.push(new Set([id]));
+  return units.map(unit=>new Set(model.objects.filter(o=>unit.has(o.id)&&
+    (o.type!=='arrow'||[o.from,o.to].every(p=>!p.target||unit.has(p.target)))).map(o=>o.id))).filter(unit=>unit.size);
+}
+const alignment={left:['x','w',0],center:['x','w',.5],right:['x','w',1],top:['y','h',0],middle:['y','h',.5],bottom:['y','h',1]};
+export function alignSelection(model,ids,mode){
+  if(!Object.hasOwn(alignment,mode))return model.objects;
+  const units=alignmentUnits(model,ids);
+  if(units.length<2)return model.objects;
+  const [axis,size,ratio]=alignment[mode];
+  const frames=units.map(unit=>selectionBounds(model.objects,unit));
+  const start=Math.min(...frames.map(r=>r[axis])), end=Math.max(...frames.map(r=>r[axis]+r[size]));
+  const moves=new Map();
+  units.forEach((unit,i)=>{
+    const r=frames[i], delta=Math.round(start+(end-start-r[size])*ratio-r[axis]);
+    if(delta)for(const id of unit)moves.set(id,delta);
+  });
+  const move=(p,delta)=>({...p,[axis]:p[axis]+delta});
+  return moves.size?model.objects.map(o=>{
+    const delta=moves.get(o.id);
+    if(!delta)return o;
+    if(o.type!=='arrow')return move(o,delta);
+    return {...o,from:o.from.target?o.from:move(o.from,delta),to:o.to.target?o.to:move(o.to,delta)};
+  }):model.objects;
+}
+
 // Clip the segment to both axes; the SVG overlay itself covers the entire slide.
 function segmentHits([a,b],r){
   let lo=0,hi=1;

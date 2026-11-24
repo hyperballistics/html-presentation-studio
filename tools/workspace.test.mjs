@@ -10,7 +10,7 @@ import {exportPDF} from './pdf.mjs';
 import {openWorkspace,revision} from './workspace.mjs';
 import {updateContext} from './context.mjs';
 import {proposalFor,renderHTML,renderPDFSource,readHTML,defaults,THEME,arrowGeometry,withoutObject,withoutObjects,fontAssets,validate,selectGroups,regroup,setReveal,revealStep,isHexColor,pageSize,pageFormats} from '../workbench/model.mjs';
-import {selectionBounds,boxHits,transformSelection,fitToPage} from '../workbench/selection.mjs';
+import {selectionBounds,boxHits,transformSelection,fitToPage,alignSelection} from '../workbench/selection.mjs';
 const id='p01-fixture', section='01-test', folder=`sections/${section}`, name=`${folder}/pages/${id}.html`;
 const original={id,title:'Fixture',background:THEME.paper,notes:'',objects:[{...defaults,id:'hero-title',type:'text',x:70,y:70,text:'测试页'}]};
 const source=renderHTML(original);
@@ -372,6 +372,27 @@ test('PDF logs the failure stage and safe process fields, not paths, command, or
   assert.equal(log.mock.callCount(),7);
 });
 
+test('object alignment handles all six modes, preserves groups, and follows connector anchors',()=>{
+  const a={...defaults,id:'a',type:'rect',x:40,y:80,w:80,h:40};
+  const b={...a,id:'b',x:180,y:140,w:40,h:60};
+  const ids=new Set(['a','b']);
+  const group={objects:[a,b],groups:[['a','b']]};
+  for(const [mode,axis,expected] of [
+    ['left','x',[40,40]],['center','x',[90,110]],['right','x',[140,180]],
+    ['top','y',[80,80]],['middle','y',[120,110]],['bottom','y',[160,140]],
+  ])assert.deepEqual(alignSelection(group,ids,mode).map(o=>o[axis]),expected,mode);
+  assert.deepEqual(group.groups,[['a','b']]);
+  const c={...a,id:'c',x:250,y:30};
+  const arrow={id:'link',type:'arrow',stroke:THEME.accent,strokeWidth:3,from:{target:'a',side:'right'},to:{x:230,y:160}};
+  const mixed={objects:[a,b,c,arrow],groups:[['a','b','link']]};
+  const aligned=alignSelection(mixed,new Set(['a','b','c','link']),'top');
+  assert.deepEqual(aligned.slice(0,3).map(o=>[o.x,o.y,o.w,o.h]),[[40,30,80,40],[180,90,40,60],[250,30,80,40]]);
+  assert.deepEqual(aligned[3].from,arrow.from);
+  assert.deepEqual(aligned[3].to,{x:230,y:110});
+  assert.equal(alignSelection({objects:[a,arrow]},new Set(['a','link']),'bottom')[1],arrow);
+  assert.deepEqual(mixed.objects,[a,b,c,arrow]);
+});
+
 test('outline API saves guarded section metadata and keeps persisted page and storyline order aligned',async t=>{
   const dir=await mkdtemp(join(tmpdir(),'html-studio-outline-'));
   await mkdir(join(dir,folder,'pages'),{recursive:true});
@@ -430,6 +451,24 @@ test('outline API saves guarded section metadata and keeps persisted page and st
   await writeFile(storyFile,baseline);
   assert.equal((await patch({op:'move-page',section,page:id,target:added,after:false})).status,409);
   assert.deepEqual((await getManifest()).sections[0].pages.map(p=>p.id),[added,id]);
+  const remove={op:'remove-page',section,page:added};
+  assert.equal((await patch(remove)).status,409,'malformed storyline must block deletion');
+  await writeFile(storyFile,storyline);
+  assert.equal((await patch(remove,stale)).status,412);
+  assert.equal((await patch({...remove,section:newSection})).status,404);
+  const bytes=await readFile(join(dir,addedPage.file),'utf8');
+  assert.equal(await edit(remove),added);
+  assert.equal(current.context_synced,true);
+  assert.equal((await fetch(`${origin}/api/pages/${added}`)).status,404);
+  await assert.rejects(stat(join(dir,addedPage.file)),{code:'ENOENT'});
+  assert.equal(await readFile(join(dir,'.runtime','history',`${added}.${addedPage.revision.slice(7)}.html`),'utf8'),bytes);
+  const orderedIds=txt=>[...txt.matchAll(/`([a-z][a-z0-9-]*)`/gm)].map(m=>m[1]);
+  assert.deepEqual(orderedIds(await readFile(storyFile,'utf8')),[id,addedInNewSection]);
+  assert.deepEqual([...((await openWorkspace(dir)).pages.keys())],[id,addedInNewSection]);
+  assert.equal((await readFile(join(dir,facts),'utf8')).includes(added),false);
+  await edit({op:'remove-page',section:newSection,page:addedInNewSection});
+  assert.equal((await patch({op:'remove-page',section,page:id})).status,409);
+  assert.equal(await readFile(join(dir,name),'utf8'),portraitSource);
 });
 
 

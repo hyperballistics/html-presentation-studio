@@ -1,5 +1,5 @@
 import {defaultFormat,pageFormats,pageSize,defaults,objectStyle,objectCSS,THEME,fontAssets,fontFace,validate,renderHTML,borderDefaults,styleLimits,sides,arrowCSS,anchorPoint,endpointPoint,arrowGeometry,withoutObjects,pdfPageCSS,selectGroups,regroup,setReveal,revealStep,isHexColor,isSourceURL,rasterImageCSS} from './model.mjs';
-import {selectionBounds,rectBetween,boxHits,transformSelection,fitToPage} from './selection.mjs';
+import {selectionBounds,rectBetween,boxHits,transformSelection,fitToPage,alignmentUnits,alignSelection} from './selection.mjs';
 const $=id=>document.getElementById(id), all=q=>[...document.querySelectorAll(q)];
 const make=(tag,classes='',text='')=>Object.assign(document.createElement(tag),{className:classes,textContent:text});
 const symbols={text:'T',rect:'□',ellipse:'○',arrow:'↗'};
@@ -361,15 +361,16 @@ async function changeOutline(body) {
     updateCatalog(next);return next.affected;
   } finally {busy=false;refreshStatus();}
 }
-function outlineDialog(op,section) {
+function outlineDialog(op,section,page) {
   if(busy)return;
-  const remove=op==='remove-section', field=$('outline-name');
-  outlineEdit={op,section:section?.id};
+  const remove=op==='remove-section'||op==='remove-page', field=$('outline-name');
+  outlineEdit={op,section:section?.id,page:page?.id};
   $('outline-title').textContent=({
-    'add-section':'新增分节','rename-section':'重命名分节','remove-section':`移除「${section?.title}」？`,'add-page':'新增页面',
+    'add-section':'新增分节','rename-section':'重命名分节','remove-section':`移除「${section?.title}」？`,'add-page':'新增页面','remove-page':`删除整页「${page?.title}」？`,
   })[op];
   $('outline-name-field').hidden=remove;field.disabled=remove;field.value=op==='rename-section'?section.title:'';
-  $('outline-status').textContent='';$('outline-submit').textContent=remove?'移除':'确认';
+  $('outline-details').textContent=page?'将从演示中删除此页，源文件已写回的版本会备份。此操作不属于画布撤销。':'';
+  $('outline-status').textContent='';$('outline-submit').textContent=page?'删除整页':remove?'移除':'确认';
   $('outline-dialog').showModal();
   if(remove)$('outline-cancel').focus();else field.select();
 }
@@ -378,14 +379,27 @@ action('outline-cancel',()=>{if(!busy)$('outline-dialog').close();});
 on('outline-dialog','cancel',e=>{if(busy)e.preventDefault();});
 on('outline-form','submit',async e=>{
   e.preventDefault();if(busy)return;
-  const {op,section}=outlineEdit, removing=op==='remove-section';
+  const {op,section,page}=outlineEdit, removing=op==='remove-section'||op==='remove-page';
+  const deletingCurrent=op==='remove-page'&&page===model.id;
+  if(deletingCurrent&&dirty()){$('outline-status').textContent='此页有未写回的草稿。请取消，先写回或撤销草稿，再确认删除。';return;}
+  const neighbor=deletingCurrent?(adjacentPage(1)??adjacentPage(-1))?.id:null;
   const title=$('outline-name').value.trim();
   if(!removing&&!title){$('outline-status').textContent='名称不能为空。';$('outline-name').focus();return;}
   $('outline-submit').disabled=true;$('outline-cancel').disabled=true;$('outline-name').readOnly=true;
   try {
-    const affected=await changeOutline({op,section,...(!removing&&{title})});
+    const affected=await changeOutline({op,section,...(page&&{page}),...(!removing&&{title})});
     $('outline-dialog').close();
-    if(removing)try{localStorage.removeItem(sectionKey(section));}catch{}
+    if(op==='remove-section')try{localStorage.removeItem(sectionKey(section));}catch{}
+    if(op==='remove-page'){
+      drawOutline();
+      if(deletingCurrent&&!await openPage(neighbor)){
+        for(const id of ['workspace','top-actions','ribbon'])$(id).inert=true;
+        banner('页面已删除，但无法载入相邻页。请刷新工作台。');return;
+      }
+      const current=$('outline').querySelector(`[data-page="${model.id}"]`);
+      if(current){current.closest('details').open=true;current.focus();}
+      announce('已删除整页，源文件已备份。');return;
+    }
     if(op==='add-page'){
       const disclosure=$('outline').querySelector(`[data-section="${section}"] details`);if(disclosure)disclosure.open=true;
       try{localStorage.removeItem(sectionKey(section));}catch{}
@@ -448,7 +462,11 @@ function pageListItem(section,p,index,n) {
     if(!valid())return;
     e.preventDefault();const {page}=pageDrag;clearPageDrag();void reorderPage(section.id,page,p.id,after(e));
   };
-  row.append(b,grip);return row;
+  const remove=make('button','page-remove','×');remove.type='button';
+  remove.disabled=pageList.length===1;remove.title=remove.disabled?'不能删除最后一页':'删除整页';
+  remove.setAttribute('aria-label',`删除整页：${p.title}`);remove.setAttribute('aria-haspopup','dialog');
+  remove.onclick=()=>outlineDialog('remove-page',section,p);
+  row.append(b,grip,remove);return row;
 }
 function drawOutline() {
   let i=0; const out=$('outline'), focused=document.activeElement?.dataset.page;
@@ -539,6 +557,7 @@ function inspector(skip) {
   $('mixed-style').hidden=!hasMixed;
   toolDisabled('group-selection',!multiple||whole);
   toolDisabled('ungroup-selection',!selectedGroups().length);
+  toolDisabled('align-selection',!multiple||alignmentUnits(model,selection).length<2);
   toolDisabled('duplicate',!items.length);toolDisabled('delete',!items.length);
   const objects=model.objects;
   toolDisabled('raise',!objects.some((item,i)=>selection.has(item.id)&&objects[i+1]&&!selection.has(objects[i+1].id)));
@@ -689,7 +708,8 @@ async function openPage(id,{recover=false,selectDefault=true}={}) {
     banner(stale?'已恢复旧版本草稿。源文件已更新，禁止直接覆盖。':'',stale);
     $('stage').scrollTo(0,0);drawOutline();render();
     for(const id of ['workspace','top-actions','ribbon']) $(id).inert=false;
-  } catch(e) {banner(e.message);}
+    return true;
+  } catch(e) {banner(e.message);return false;}
   finally {busy=false;if(model)refreshStatus();}
 }
 function timeTravel(from,to) {if(!from.length||busy||pointer)return;to.push(model);model=from.pop();group='';sampling=null;select(model.objects.filter(o=>selection.has(o.id)).map(o=>o.id),false);persist();render();}
@@ -723,6 +743,17 @@ function groupSelection(makeGroup){
   announce(makeGroup?`已组合 ${selection.size} 个对象。`:'已取消组合。');
 }
 action('group-selection',()=>groupSelection(true));action('ungroup-selection',()=>groupSelection(false));
+const alignDialog=$('align-dialog');
+action('align-selection',()=>{if(!busy&&!pointer)alignDialog.showModal();});
+action('align-cancel',()=>alignDialog.close());
+on('align-options','click',e=>{
+  const button=e.target.closest('button[data-align]');
+  if(!button||busy||pointer)return;
+  const objects=alignSelection(model,selection,button.dataset.align);
+  alignDialog.close();
+  if(objects!==model.objects){commit({...model,objects});announce(`已${button.textContent}。`);}
+  else announce('对象已对齐。');
+});
 action('undo',()=>timeTravel(history,future));action('redo',()=>timeTravel(future,history));
 for(const type of ['text','rect','ellipse','arrow'])action(`add-${type}`,()=>insert(type));
 function portableSelection(){
