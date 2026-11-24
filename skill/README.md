@@ -1,10 +1,14 @@
 # HTML Studio Skill 配置
 
+## 用途
+
 本目录维护把 HTML Studio 发行包包装成可复用 Codex Skill 的规则。它不是运行时代码，也不是当前演示内容；只有构建、分享或配置 Skill 时才读取。
 
 如果只是把工作区交给另一个 Harness 运行，不需要构建或安装 Skill；使用 [跨 Harness 部署](../agents/deployment.md)。
 
-## 文件职责
+## 主要内容
+
+按任务组织的补充说明见[参考模板目录](references/)。
 
 | 文件 | 作用 | 读取时机 |
 |---|---|---|
@@ -15,7 +19,7 @@
 | [`references/operations.template.md`](references/operations.template.md) | 命令与故障处理补充 | 目标工作区自身文档不足时 |
 | [`references/verification.template.md`](references/verification.template.md) | 浏览器与导出视觉验收 | UI、布局或导出需要人工/浏览器检查时 |
 
-## 构建原则
+## 维护边界
 
 1. **模板化**：配置只写相对路径、通用占位符和契约，不写本机路径、当前项目名、会话状态或运行记录。
 2. **渐进披露**：`SKILL.md` 保持短小；细节放到 `references/`，并按任务类型逐个读取。

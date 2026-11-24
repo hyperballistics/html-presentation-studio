@@ -11,6 +11,7 @@
 | 初始化或复用本包 | [复用步骤与模板](README.md#复用于下一个项目)；模板不是当前项目事实 |
 | 打包或部署到其他 Harness | [跨 Harness 部署](agents/deployment.md) → 按需读[客户端入口](agents/protocol.md) |
 | 构建、分享或配置 Codex Skill | [Skill 索引](skill/README.md) → 对应配置文件；只做发行与校验，不把本机路径写进规则 |
+| Git 日常维护、提交或发布 | [Agent Git 维护原则](agents/git.md) |
 | 主题或结构开发 | 主题先读[设计标准](agents/design.md)；结构先定位 [模型与渲染器](workbench/model.mjs)，再按需求读取调用处 |
 
 - `deck.manifest.json`、`STORYLINE.md` 与 `sections/` 指向当前内容；发行包的初始内容是可运行示例，不是项目规则。`templates/` 仅供初始化，不作为当前索引或任务上下文。
