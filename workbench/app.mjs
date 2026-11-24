@@ -1,4 +1,4 @@
-import {defaultFormat,pageFormats,pageSize,defaults,objectStyle,objectCSS,THEME,fontAssets,fontFace,validate,renderHTML,borderDefaults,styleLimits,sides,arrowCSS,anchorPoint,endpointPoint,arrowGeometry,withoutObjects,pdfPageCSS,selectGroups,regroup,setReveal,revealStep,isHexColor} from './model.mjs';
+import {defaultFormat,pageFormats,pageSize,defaults,objectStyle,objectCSS,THEME,fontAssets,fontFace,validate,renderHTML,borderDefaults,styleLimits,sides,arrowCSS,anchorPoint,endpointPoint,arrowGeometry,withoutObjects,pdfPageCSS,selectGroups,regroup,setReveal,revealStep,isHexColor,isSourceURL,rasterImageCSS} from './model.mjs';
 import {selectionBounds,rectBetween,boxHits,transformSelection,fitToPage} from './selection.mjs';
 const $=id=>document.getElementById(id), all=q=>[...document.querySelectorAll(q)];
 const make=(tag,classes='',text='')=>Object.assign(document.createElement(tag),{className:classes,textContent:text});
@@ -89,6 +89,8 @@ const svg = (tag,attrs={}) => {
 function paintArrow(el,o,objects) {
   const g=arrowGeometry(o,objects), line=el.querySelector('.arrow-shaft');
   for(const [key,value] of Object.entries(g.line))line.setAttribute(key,value);
+  if(o.dashed)line.setAttribute('stroke-dasharray','6 5');
+  else line.removeAttribute('stroke-dasharray');
   line.setAttribute('stroke',o.stroke);line.setAttribute('stroke-width',o.strokeWidth);
   const polygon=el.querySelector('polygon');polygon.setAttribute('points',g.points);polygon.setAttribute('fill',o.stroke);
   const hit=el.querySelector('.arrow-hit');
@@ -99,18 +101,27 @@ function arrowNode(o,edit,objects,size) {
   if(edit)el.append(svg('line',{class:'arrow-hit','aria-hidden':'true'}));
   el.append(svg('line',{class:'arrow-shaft'}),svg('polygon'));paintArrow(el,o,objects);return el;
 }
-function objectNode(o,edit,objects,size) {
+function objectNode(o,edit,objects,size,links) {
   if(o.type==='arrow')return arrowNode(o,edit,objects,size);
   const node=make('div','object'+(edit?' editable':''),o.text);
+  if(o.image){
+    const img=make('img');Object.assign(img,{src:o.image,alt:o.text,draggable:false});
+    img.style.cssText=rasterImageCSS;node.replaceChildren(img);
+  }else if(links&&o.href){
+    const a=make('a','source-link',o.text);
+    Object.assign(a,{href:o.href,target:'_blank',rel:'noopener noreferrer'});
+    a.title='新标签页打开';a.setAttribute('aria-label',`${o.text}（新标签页打开）`);
+    node.replaceChildren(a);
+  }
   node.dataset.editId=o.id;
   Object.assign(node.style,objectStyle(o));
   node.style.cssText+=objectCSS;
   return node;
 }
-function populate(slide,edit=false,page=model) {
+function populate(slide,edit=false,page=model,links=!edit) {
   const size=pageSize(page.format);
   Object.assign(slide.style,{width:`${size.w}px`,height:`${size.h}px`,backgroundColor:page.background});
-  slide.replaceChildren(...page.objects.map(o=>objectNode(o,edit,page.objects,size)));
+  slide.replaceChildren(...page.objects.map(o=>objectNode(o,edit,page.objects,size,links)));
   return slide;
 }
 function box(el,o) {Object.assign(el.style,{left:`${o.x}px`,top:`${o.y}px`,width:`${o.w}px`,height:`${o.h}px`});}
@@ -305,7 +316,7 @@ for(const type of ['pointerup','pointercancel','lostpointercapture'])layerList.a
   if(layerDrag?.pointer===e.pointerId)finishLayerDrag(type==='pointerup');
 });
 function renderThumb(thumb,page) {
-  const {w,h}=pageSize(page.format), slide=populate(make('div','slide'),false,page);
+  const {w,h}=pageSize(page.format), slide=populate(make('div','slide'),false,page,false);
   thumb.style.aspectRatio=`${w} / ${h}`;
   // Keep portrait thumbnails usable in the narrow outline without distorting the page.
   thumb.style.maxWidth=w<h?`${156*w/h}px`:'';
@@ -464,7 +475,9 @@ function inspector(skip) {
   const allBoxes=items.length>0&&items.every(item=>item.type!=='arrow');
   const whole=multiple&&sameGroup();
   $('object-fields').hidden=!allBoxes;$('page-fields').hidden=!!items.length;$('arrow-fields').hidden=!allArrows;
-  $('selection-fields').hidden=!multiple;$('object-geometry').hidden=multiple;$('object-text').hidden=multiple;
+  $('selection-fields').hidden=!multiple;$('object-geometry').hidden=multiple;$('object-text').hidden=multiple;$('object-href-row').hidden=multiple||o?.type!=='text';
+  $('object-text-title').textContent=o?.image?'图片替代文本':'文本';
+  $('object-text').setAttribute('aria-label',o?.image?'图片替代文本':'对象文本');
   $('radius-row').hidden=items.some(item=>item.type==='ellipse');
   for(const k of ends)$(`${k}-fields`).hidden=multiple;
   if(multiple){
@@ -492,7 +505,7 @@ function inspector(skip) {
     for(const input of props) {
       const hidden=input.closest('[hidden]');
       if(hidden&&hidden!==$('properties')&&$('properties').contains(hidden))continue;
-      const k=input.dataset.prop, value=item=>item[k]??borderDefaults[k];
+      const k=input.dataset.prop, value=item=>item[k]??(k==='href'?'':borderDefaults[k]);
       const sameValue=items.every(item=>value(item)===value(first));
       hasMixed||=!sameValue;
       input.toggleAttribute('data-mixed',!sameValue);
@@ -501,6 +514,7 @@ function inspector(skip) {
         if(!sameValue&&!mixed){const option=make('option','','混合');option.value='';option.disabled=true;option.dataset.mixed='';input.prepend(option);}
         else if(sameValue)mixed?.remove();
       }
+      if(k==='href'&&input!==skip)input.setCustomValidity('');
       if(input!==skip)input.value=!sameValue&&input.type!=='color'?'':k==='fill'&&first.fill==='transparent'?THEME.card:value(first);
       if(k==='x')input.max=width-first.w;
       if(k==='y')input.max=height-first.h;
@@ -631,6 +645,8 @@ function update(changes,key='',skip=null,draw=true) {
   const objects=model.objects.map(o=>{
     if(!selection.has(o.id))return o;
     const next={...o,...changes};
+    if(next.image&&!next.text.trim())return o;
+    if(next.href&&!next.text.trim())next.href='';
     if(changes.borderColor!==undefined&&!o.borderWidth)next.borderWidth=1;
     return normalized(next);
   });
@@ -722,12 +738,24 @@ for(const b of toggles)b.onclick=()=>update({[b.dataset.toggle]:b.getAttribute('
 for(const input of props){
   const key=input.dataset.prop, number=input.type==='number'||key==='line';
   const change=()=>{
+    if(key==='href'){
+      const href=input.value.trim();
+      if(href&&(!isSourceURL(href)||!active()?.text.trim())){
+        input.setCustomValidity('请输入有效 HTTPS 地址，并保留可见的链接文字。');input.reportValidity();return;
+      }
+      input.value=href;
+      if(href!==(active()?.href??''))update({href},key,input);
+      return;
+    }
     if(input.type==='color'){applyColor(key,input.value,input);return;}
     if(number&&(input.value===''||!Number.isFinite(Number(input.value))))return;
     const value=number?Number(input.value):input.value;
-    if(value!=='')update({[key]:value},key,input);
+    if(key==='text'&&active()?.image&&!value.trim())return;
+    if(value!==''||key==='text')update({[key]:value},key,input);
   };
-  input.addEventListener(input.type==='number'?'change':'input',change);
+  input.addEventListener(input.type==='number'||key==='href'?'change':'input',change);
+  if(key==='text')input.addEventListener('blur',()=>{if(active()?.image&&!input.value.trim())inspector();});
+  if(key==='href')input.addEventListener('input',()=>input.setCustomValidity(''));
   if(input.type==='number')input.addEventListener('blur',()=>{if(model)inspector();});
 }
 on('notes','input',e=>{if(!busy)commit({...model,notes:e.target.value},'notes',e.target);});
@@ -1182,7 +1210,7 @@ function playerKey(e) {
   if(e.key.toLowerCase()==='f'&&!e.repeat){e.preventDefault();void toggleFullscreen();}
   else if(e.key==='Escape'&&document.fullscreenElement!==player){e.preventDefault();if(viewportFull)void toggleFullscreen();else closePlayer();}
   else if(['ArrowLeft','PageUp','ArrowRight','PageDown'].includes(e.key)){e.preventDefault();void turnPage(['ArrowLeft','PageUp'].includes(e.key)?-1:1);}
-  else if(e.code==='Space'&&!e.target.closest('button')){e.preventDefault();if(!e.repeat&&(e.shiftKey||!revealNext()))void turnPage(e.shiftKey?-1:1);}
+  else if(e.code==='Space'&&!e.target.closest('button,a[href]')){e.preventDefault();if(!e.repeat&&(e.shiftKey||!revealNext()))void turnPage(e.shiftKey?-1:1);}
 }
 action('present',()=>{
   if(busy)return;
@@ -1193,7 +1221,7 @@ action('present',()=>{
 });
 action('close-present',closePlayer);
 action('reveal-next',revealNext);
-action('present-stage',revealNext);
+action('present-stage',e=>{if(!e.target.closest('a[href]'))revealNext();});
 action('prev-page',()=>turnPage(-1));action('next-page',()=>turnPage(1));
 action('fullscreen',toggleFullscreen);action('exit-fullscreen',toggleFullscreen);
 document.addEventListener('fullscreenchange',syncFullscreen);
@@ -1256,10 +1284,10 @@ on('conflict-dialog','cancel',e=>{if(busy)e.preventDefault();});
 action('recover',()=>requestExport('html',{recover:true}));
 window.addEventListener('beforeunload',e=>{if(model&&dirty()&&!storageOK){e.preventDefault();e.returnValue='';}});
 function changes(before,after) {
-  const lines=[]; const show=v=>typeof v==='string'?v:JSON.stringify(v);
+  const lines=[]; const show=(v,k)=>k==='image'&&v?`内嵌图片（${v.length} 字符）`:typeof v==='string'?v:JSON.stringify(v);
   const compare=(keys,a,b,label)=>{
     const changed=keys.filter(k=>!same(a[k],b[k]));
-    if(changed.length)lines.push(label,...changed.map(k=>`  ${k}\n    − ${show(a[k])}\n    + ${show(b[k])}`));
+    if(changed.length)lines.push(label,...changed.map(k=>`  ${k}\n    − ${show(a[k],k)}\n    + ${show(b[k],k)}`));
   };
   compare(['title','format','background','notes','transition','clickReveal','groups'],before,after,'页面');
   const previousIds=new Set(before.objects.map(o=>o.id)), nextIds=new Set(after.objects.map(o=>o.id));

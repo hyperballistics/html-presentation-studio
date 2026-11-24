@@ -116,7 +116,8 @@
       </fieldset>
       <span id="mixed-style" class="chip" hidden>部分样式值不同</span>
       <fieldset id="object-fields" hidden><legend class="sr">对象属性</legend>
-        <section class="group"><h3>文本</h3><textarea id="object-text" aria-label="对象文本" data-prop="text" rows="2" maxlength="2000"></textarea>
+        <section class="group"><h3 id="object-text-title">文本</h3><textarea id="object-text" aria-label="对象文本" data-prop="text" rows="2" maxlength="2000"></textarea>
+          <label id="object-href-row" class="field" hidden>来源链接（HTTPS）<input id="object-href" data-prop="href" type="url" maxlength="2048" placeholder="https://…"></label>
           <div class="pairs"><label class="field">字体<select data-prop="font"><option value="sans">默认混排</option><option value="han">思源黑体 SC</option><option value="serif">衬线</option><option value="mono">等宽</option></select></label><label class="field">字号<input type="number" data-prop="size" min="10" max="160" step="1"></label></div>
           <div class="toggles" role="group" aria-label="字形"><button data-toggle="bold" aria-label="加粗" aria-pressed="false"><b>B</b></button><button data-toggle="italic" aria-label="斜体" aria-pressed="false"><i>I</i></button><button data-toggle="underline" aria-label="下划线" aria-pressed="false"><u>U</u></button></div>
           <div class="pairs"><label class="field">对齐<select data-prop="align"><option value="left">左对齐</option><option value="center">居中</option><option value="right">右对齐</option></select></label><label class="field">行距<select data-prop="line"><option>1.1</option><option>1.25</option><option>1.4</option><option>1.6</option></select></label></div>

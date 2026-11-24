@@ -31,7 +31,7 @@ export async function makeServer(root=fileURLToPath(new URL('..',import.meta.url
   return createServer(async (req,res)=>{
     res.setHeader('Cache-Control','no-store');
     res.setHeader('X-Content-Type-Options','nosniff');
-    res.setHeader('Content-Security-Policy',"default-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; form-action 'none'");
+    res.setHeader('Content-Security-Policy',"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; form-action 'none'");
     const send=(code,body,type='application/json')=>{res.writeHead(code,{'Content-Type':type==='font/woff2'?type:`${type}; charset=utf-8`});res.end(type==='application/json'?JSON.stringify(body):body);};
     const host=req.headers.host||'';
     try {

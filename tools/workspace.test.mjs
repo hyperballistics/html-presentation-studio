@@ -14,6 +14,8 @@ import {selectionBounds,boxHits,transformSelection,fitToPage} from '../workbench
 const id='p01-fixture', section='01-test', folder=`sections/${section}`, name=`${folder}/pages/${id}.html`;
 const original={id,title:'Fixture',background:THEME.paper,notes:'',objects:[{...defaults,id:'hero-title',type:'text',x:70,y:70,text:'测试页'}]};
 const source=renderHTML(original);
+const pngData='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZi8AAAAASUVORK5CYII=';
+const rasterObject={...defaults,id:'test-image',type:'rect',x:60,y:160,w:100,h:100,text:'照片说明 <示例>',image:pngData};
 const manifest={version:1,title:'Fixture',sections:[{id:section,title:'Fixture',context:`${folder}/section.md`,pages:[{id,title:'Fixture',file:name}]}]};
 const story=`# Fixture\n\n| Page | Content | Role |\n|---|---|---|\n| \`${id}\` | A | First page |\n`;
 const facts='.runtime/context/PAGE-FACTS.md';
@@ -85,6 +87,7 @@ test('proposal is scoped and typed',()=>{
   assert.notEqual(obj.text,'一个场景，一个指标');
   assert.throws(()=>proposalFor(original,proposal({x:2000}),task),/画布/);
   assert.throws(()=>proposalFor(original,proposal({html:'<b>'}),task),/越界/);
+  assert.throws(()=>proposalFor(original,proposal({href:'https://example.org/'}),task),/越界/);
   assert.throws(()=>proposalFor(original,proposal({text:'a'}),{...task,edit_id:'different'}),/越界/);
   assert.throws(()=>proposalFor(original,proposal({text:'a'}),{...task,base_revision:'changed'}),/版本/);
 });
@@ -202,6 +205,7 @@ test('loopback API: task receipt, guarded atomic write, competing writer 412, ba
   const {version}=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8'));
   assert.equal(catalog.studio_version,version);assert.equal(catalog.version,manifest.version);
   const get=await fetch(url), etag=get.headers.get('etag');
+  assert.match(get.headers.get('content-security-policy'),/img-src 'self' data:/);
   const info=await get.json();assert.equal(info.file,name);assert.equal(info.absolute_file,await realpath(join(dir,name)));assert.equal(etag,`"${info.revision}"`);
   const hdr={'Content-Type':'application/json',Origin:origin};
   const pdf=(models,originHeader=origin)=>fetch(`${origin}/api/pdf`,{method:'POST',headers:{...hdr,Origin:originHeader},body:JSON.stringify(models)});
@@ -235,7 +239,8 @@ test('loopback API: task receipt, guarded atomic write, competing writer 412, ba
   await writeFile(join(dir,'STORYLINE.md'),'# Misaligned');
   assert.equal((await sync()).status,409);
   await writeFile(join(dir,'STORYLINE.md'),story);
-  const models=[{...info.model,notes:'first'},{...info.model,notes:'second'}].map(m=>({...m,objects:[...m.objects,arrow]}));
+  const models=['first','second'].map(label=>({...info.model,notes:label,objects:[
+    {...info.model.objects[0],text:`— ${label}`,href:`https://example.org/${label}`},arrow,rasterObject]}));
   const receipts=await Promise.all(models.map(m=>put(m)));
   assert.deepEqual(receipts.map(r=>r.status).sort(),[200,412]);
   const winner=receipts.findIndex(r=>r.status===200), html=await readFile(join(dir,name),'utf8');
@@ -272,7 +277,7 @@ test('configured export writes standalone drafts to the selected directory witho
   const post=(model,site=origin)=>fetch(`${origin}/api/html`,{method:'POST',headers:{Origin:site,'Content-Type':'application/json'},body:JSON.stringify(model)});
   const absDest=await realpath(dest);
   assert.equal((await (await fetch(`${origin}/api/manifest`)).json()).export_root,absDest);
-  const draft={...original,transition:'fade',clickReveal:['hero-title'],objects:[{...original.objects[0],text:'未写回的草稿'}]};
+  const draft={...original,transition:'fade',clickReveal:['hero-title'],objects:[{...original.objects[0],text:'未写回的草稿'},rasterObject]};
   assert.equal((await post(draft,'https://elsewhere.invalid')).status,403);
   assert.equal((await post({...draft,clickReveal:['absent']})).status,400);
   assert.equal((await post({...draft,id:'../escape'})).status,404);
@@ -285,6 +290,7 @@ test('configured export writes standalone drafts to the selected directory witho
   assert.match(bytes,/data:font\/woff2;base64,/);
   assert.match(bytes,/fixture license/);
   assert.match(bytes,/未写回的草稿/);
+  assert.ok(bytes.includes(`<img src="${pngData}" alt="照片说明 &lt;示例&gt;"`));
   assert.equal(bytes,await readFile(b,'utf8'));
   assert.equal(source,await readFile(join(root,name),'utf8'));
   await rename(dest,`${dest}-old`);
@@ -497,4 +503,49 @@ test('a context refresh failure does not undo a published page or backup',async 
   await writeFile(join(dir,'STORYLINE.md'),story);
   await ws.locked(()=>updateContext(ws));
   assert.match(await readFile(join(dir,facts),'utf8'),/Published despite derived failure/);
+});
+
+test('source footnotes are safe native links and round-trip with editable text',()=>{
+  const model=structuredClone(original), o=model.objects[0];
+  o.text='— 来源 <tag>';o.href='https://example.org/p?a=1&b="quoted"';
+  const html=renderHTML(model,{embeddedFaces:'/* test fonts */'});
+  assert.ok(html.includes('href="https://example.org/p?a=1&amp;b=&quot;quoted&quot;"'));
+  assert.ok(html.includes('target="_blank" rel="noopener noreferrer"'));
+  assert.ok(html.includes('新标签页打开'));
+  assert.doesNotMatch(html,/tabindex="-1"|<tag>/);
+  assert.deepEqual(readHTML(renderHTML(model),id),model);
+  for(const href of ['javascript:alert(1)','data:text/html,x','http://example.org','//example.org','https:///example.org','https://a@example.org','https://@example.org','https://example.org/a b','https://example.org/\npath','https://']){
+    o.href=href;assert.throws(()=>validate(model),/HTTPS/,href);
+  }
+  o.href='';assert.doesNotMatch(renderHTML(model),/<a class="source-link"/);
+});
+
+test('bounded raster data is editable geometry, persisted, and projected into HTML and print',()=>{
+  const model={...original,objects:[...original.objects,structuredClone(rasterObject)]};
+  const image=model.objects.at(-1);
+  const entity=renderHTML(model), print=renderPDFSource([model],'');
+  for(const html of [entity,print]){
+    assert.ok(html.includes(`<img src="${pngData}" alt="照片说明 &lt;示例&gt;" draggable="false"`));
+    assert.match(html,/object-fit:contain/);
+  }
+  assert.match(print,/img-src data:/);
+  const moved=transformSelection(model.objects,new Set([image.id]),{dx:20,dy:30});
+  assert.equal(moved.at(-1).x,image.x+20);
+  assert.deepEqual(readHTML(renderHTML({...model,objects:moved}),id).objects.at(-1),{...image,x:80,y:190});
+  for(const value of ['https://example.org/photo.png','data:image/svg+xml;base64,AAAA','data:image/jpeg;base64,iVBORw0KGgo=','data:image/png;base64,iVBORw0KGgo=\n',pngData+'Q'.repeat(256000)]){
+    image.image=value;assert.throws(()=>validate(model),/本地 PNG\/JPEG/);
+  }
+  image.image=pngData;image.text=' ';assert.throws(()=>validate(model),/替代文本/);
+  image.text='照片';image.type='text';assert.throws(()=>validate(model),/字段/);
+});
+
+
+test('dashed connectors can omit the arrowhead without moving the endpoint',()=>{
+  const connector={...arrow,lineOnly:true,dashed:true};
+  const model={...original,objects:[...original.objects,connector]};
+  const {line,to}=arrowGeometry(connector,model.objects);
+  assert.deepEqual([line.x2,line.y2],[to.x,to.y]);
+  assert.match(renderHTML(model),/stroke-dasharray="6 5"/);
+  assert.deepEqual(readHTML(renderHTML(model),id),model);
+  assert.throws(()=>validate({...model,objects:[...original.objects,{...connector,dashed:'true'}]}),/箭头样式/);
 });

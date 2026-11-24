@@ -53,7 +53,21 @@ export const sides = ['top','right','bottom','left'];
 const arrowFields = ['from','to','stroke','strokeWidth'];
 export const styleLimits = {radius:360,borderWidth:24,strokeWidth:24};
 export const arrowCSS = ({w,h}) => `position:absolute;inset:0;width:${w}px;height:${h}px;pointer-events:none;`;
+// Permit only absolute HTTPS source links; reject ambiguous or credential-bearing URLs.
+export function isSourceURL(value) {
+  if(typeof value!=='string'||value.length>2048||!/^https:\/\/[^/\s?#]+/i.test(value)||/[\s\\\u0000-\u001f\u007f]/u.test(value))return false;
+  try {const url=new URL(value);return url.protocol==='https:'&&!!url.hostname&&!url.username&&!url.password&&!value.split(/[/?#]/)[2].includes('@');}catch{return false;}
+}
+// Only bounded offline raster data, with an explicit MIME and matching file signature.
+export const rasterImageCSS='display:block;width:100%;height:100%;object-fit:contain;object-position:right center;pointer-events:none';
+function isRasterImage(value) {
+  if(typeof value!=='string'||value.length>256_000)return false;
+  const m=/^data:image\/(png|jpeg);base64,([A-Za-z0-9+/]+={0,2})$/u.exec(value);
+  if(!m||m[0]!==value||m[2].length%4)return false;
+  return m[1]==='png'?m[2].startsWith('iVBORw0KGgo'):m[2].startsWith('/9j/');
+}
 const propKeys = o => o.type==='arrow'?arrowFields:[...boxFields,...Object.keys(borderDefaults)];
+const modelKeys = o => [...propKeys(o),...(o.type==='text'?['href']:o.type==='rect'?['image']:[])];
 const idPattern = /^[a-z][a-z0-9-]{0,59}$/;
 export const isHexColor = v => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v);
 const plain = v => v !== null && typeof v === 'object' && Object.getPrototypeOf(v) === Object.prototype;
@@ -124,15 +138,17 @@ export function validate(model, pageId = model?.id) {
   }
   for (const o of model.objects) {
     if(o.type==='arrow') {
-      req(exact(o,['id','type',...arrowFields]) && isHexColor(o.stroke) && bounded(o.strokeWidth,1,styleLimits.strokeWidth), `${o.id} 的箭头样式无效。`);
+      req(exact(o,['id','type',...arrowFields,...['lineOnly','dashed'].filter(k=>Object.hasOwn(o,k)&&typeof o[k]==='boolean')]) && isHexColor(o.stroke) && bounded(o.strokeWidth,1,styleLimits.strokeWidth), `${o.id} 的箭头样式无效。`);
       for(const end of [o.from,o.to]) {
         const target=found.get(end?.target);
         req((exact(end,['x','y']) && bounded(end.x,0,width) && bounded(end.y,0,height)) || (exact(end,['target','side']) && sides.includes(end.side) && target && target.type!=='arrow'), `${o.id} 的端点或锚点无效。`);
       }
       continue;
     }
-    const keys=Object.keys(o), allowed=['id','type',...propKeys(o)];
+    const keys=Object.keys(o), allowed=['id','type',...modelKeys(o)];
     req(keys.every(k=>allowed.includes(k)) && boxFields.every(k=>Object.hasOwn(o,k)) && text(o.text,2000), `${o.id} 的字段或文字无效。`);
+    req(!Object.hasOwn(o,'href')||o.href===''||(isSourceURL(o.href)&&o.text.trim().length>0), `${o.id} 的来源链接须使用有效 HTTPS 地址和可见文字。`);
+    req(!Object.hasOwn(o,'image')||(isRasterImage(o.image)&&o.text.trim().length>0), `${o.id} 的图片须为带替代文本的本地 PNG/JPEG（数据不超过 256000 字符）。`);
     req(bounded(o.w,24,width) && bounded(o.h,24,height) && bounded(o.x,0,width-o.w) && bounded(o.y,0,height-o.h), `${o.id} 超出画布或尺寸无效。`);
     req(bounded(o.size,10,160) && Object.hasOwn(FONTS,o.font) && ['left','center','right'].includes(o.align) && [1.1,1.25,1.4,1.6].includes(o.line), `${o.id} 的排版属性无效。`);
     req(['bold','italic','underline'].every(k => typeof o[k] === 'boolean') && isHexColor(o.color) && (isHexColor(o.fill) || o.fill === 'transparent') && bounded(o.radius,0,styleLimits.radius) && bounded(o.inset,0,80), `${o.id} 的样式属性无效。`);
@@ -170,7 +186,7 @@ export function endpointPoint(end,objects) {
 export function arrowGeometry(o,objects) {
   const from=endpointPoint(o.from,objects), to=endpointPoint(o.to,objects);
   const dx=to.x-from.x,dy=to.y-from.y,len=Math.hypot(dx,dy);
-  const ux=len?dx/len:0,uy=len?dy/len:0,head=Math.min(len,8+o.strokeWidth*2.5),wing=head*.48;
+  const ux=len?dx/len:0,uy=len?dy/len:0,head=o.lineOnly?0:Math.min(len,8+o.strokeWidth*2.5),wing=head*.48;
   const bx=to.x-ux*head,by=to.y-uy*head;
   return {from,to,line:{x1:from.x,y1:from.y,x2:bx,y2:by},points:`${to.x},${to.y} ${bx-uy*wing},${by+ux*wing} ${bx+uy*wing},${by-ux*wing}`};
 }
@@ -181,6 +197,7 @@ export function withoutObjects(model, ids) {
   return setReveal(next,ids,'');
 }
 export const withoutObject = (model,id) => withoutObjects(model,new Set([id]));
+export const sourceLinkCSS = '.source-link{color:inherit;text-decoration:underline;text-underline-offset:.14em}.source-link:focus-visible{outline:2px solid #065FA9;outline-offset:-1px}';
 export const objectCSS = 'position:absolute;box-sizing:border-box;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere;';
 const escape = s => String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
 export function renderSlide(model) {
@@ -190,10 +207,11 @@ export function renderSlide(model) {
     if(o.type==='arrow') {
       const g=arrowGeometry(o,model.objects);
       const line=Object.entries(g.line).map(([k,v])=>`${k}="${v}"`).join(' ');
-      return `  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size.w} ${size.h}" data-edit-id="${o.id}" style="${arrowCSS(size)}" role="img" aria-label="箭头"><line ${line} stroke="${o.stroke}" stroke-width="${o.strokeWidth}"/><polygon points="${g.points}" fill="${o.stroke}"/></svg>`;
+      return `  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size.w} ${size.h}" data-edit-id="${o.id}" style="${arrowCSS(size)}" role="img" aria-label="箭头"><line ${line} stroke="${o.stroke}" stroke-width="${o.strokeWidth}"${o.dashed?' stroke-dasharray="6 5"':''}/><polygon points="${g.points}" fill="${o.stroke}"/></svg>`;
     }
     const styles = Object.entries(objectStyle(o)).map(([k,v])=>`${k.replace(/[A-Z]/g,l=>'-'+l.toLowerCase())}:${v}`).join(';');
-    return `  <div class="object" data-edit-id="${o.id}" style="${escape(styles)}">${escape(o.text)}</div>`;
+    const content=escape(o.text);
+    return `  <div class="object" data-edit-id="${o.id}" style="${escape(styles)}">${o.image?`<img src="${o.image}" alt="${content}" draggable="false" style="${rasterImageCSS}">`:o.href?`<a class="source-link" href="${escape(o.href)}" target="_blank" rel="noopener noreferrer" aria-label="${content}（新标签页打开）" title="新标签页打开">${content}</a>`:content}</div>`;
   }).join('\n');
   return `<section class="slide" data-page-id="${model.id}" aria-label="${escape(model.title)}" style="background-color:${model.background}">
 ${blocks}
@@ -214,8 +232,8 @@ export function renderPDFSource(models, embeddedFaces) {
     const slide=renderSlide(model);
     return `<div class="pdf-page" data-format="${pageSize(model.format).format}">${slide}</div>`;
   }).join('');
-  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; font-src data:"><style>${embeddedFaces}
-html,body{margin:0}.slide{position:relative;overflow:hidden}.object{${objectCSS}}${pdfPageCSS(models)}</style></head><body>${pages}</body></html>`;
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; font-src data:; img-src data:"><style>${embeddedFaces}
+html,body{margin:0}.slide{position:relative;overflow:hidden}.object{${objectCSS}}${sourceLinkCSS}${pdfPageCSS(models)}</style></head><body>${pages}</body></html>`;
 }
 export function renderHTML(model, {embeddedFaces,licenses}={}) {
   // The JSON is the editable block; the semantic HTML below is its deterministic display projection.
@@ -225,7 +243,7 @@ export function renderHTML(model, {embeddedFaces,licenses}={}) {
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escape(model.title)}</title>
 <style>${embeddedFaces||fontAssets.map(asset=>fontFace(asset,`../../../workbench/fonts/${asset[1]}`)).join('\n')}
-html,body{margin:0;background:${THEME.background}}body{min-height:100vh;display:grid;place-items:center;overflow:auto}.slide{width:${w}px;height:${h}px;position:relative;overflow:hidden}.object{${objectCSS}}</style>
+html,body{margin:0;background:${THEME.background}}body{min-height:100vh;display:grid;place-items:center;overflow:auto}.slide{width:${w}px;height:${h}px;position:relative;overflow:hidden}.object{${objectCSS}}${model.objects.some(o=>['href','image','lineOnly','dashed'].some(key=>Object.hasOwn(o,key)))?sourceLinkCSS:''}</style>
 </head><body>
 <script type="application/json" id="slide-model">\n${json}\n</script>
 ${slide}${licenses?`\n<template id="font-licenses">${escape(licenses)}</template>`:''}
