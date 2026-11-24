@@ -32,10 +32,15 @@ npm test                      # 用临时副本验证协议，不改示例
 | [`AGENTS.md`](AGENTS.md) | 项目级 Agent 入口，按任务指向应读取的规则和数据。 |
 | [`CLAUDE.md`](CLAUDE.md) | 将 Claude Code 路由到共用的 `AGENTS.md`。 |
 | [`CONSTITUTION.md`](CONSTITUTION.md) | 定义源文件、草稿、写回、历史和导出必须遵守的项目约定。 |
+| [`LICENSE`](LICENSE) | 项目采用的 MIT 许可证。 |
 | [`README.md`](README.md) | 介绍如何运行、编辑、导出和复用工作区，并提供仓库导航。 |
 | [`STORYLINE.md`](STORYLINE.md) | 按页记录当前演示的内容、作用及前后承接。 |
 | [`deck.manifest.json`](deck.manifest.json) | 登记当前演示的分节、页序、页面 ID 和实体路径。 |
 | [`package.json`](package.json) | 定义 Node.js 版本要求、命令入口和发行包文件范围。 |
+
+## 许可证
+
+项目采用 MIT 许可证，全文见 [LICENSE](LICENSE)。随包字体遵循各自的 SIL Open Font License 1.1，许可文件见[字体目录](workbench/fonts/)。
 
 ## 试一页
 
@@ -142,7 +147,7 @@ npm run context -- review "<页面ID>"      # 确认该页源、叙事行及章�
    该命令生成独立实体并同步清单和索引；同分节、ID 和标题重跑不覆盖已有页。分节 ID 用小写字母、数字、连字符；页 ID 还须以小写字母开头。ID 最长 60 字符，路径必须与 ID 一致。
 3. **切换当前指针**：按叙事索引模板补齐各页内容与承接，页行与清单顺序一致。更换项目标题后，如果不需要随包示例，从清单去掉示例分节、从索引去掉同一页行，再运行 `npm run check`。这不删除实体文件；未登记目录仍可能被打包，分发新项目副本前应检查 `npm pack --dry-run` 的文件列表。
 
-实体内唯一可维护数据是 `<script type="application/json" id="slide-model">`；正文是 `workbench/model.mjs` 生成的显示投影，不是第二份维护源。工作台按清单加载页面，不把任意旧 HTML 当作可编辑实体。`tools/workspace.mjs` 负责版本校验、备份和写回；仅适用于可信本机单实例，不对公网提供服务，不让浏览器或 Agent 提案传入任意写入路径。应用源码的分发许可由项目所有者另行约定。
+实体内唯一可维护数据是 `<script type="application/json" id="slide-model">`；正文是 `workbench/model.mjs` 生成的显示投影，不是第二份维护源。工作台按清单加载页面，不把任意旧 HTML 当作可编辑实体。`tools/workspace.mjs` 负责版本校验、备份和写回；仅适用于可信本机单实例，不对公网提供服务，不让浏览器或 Agent 提案传入任意写入路径。
 
 **当前界限**：不是 PPTX 读写器，不支持局部字符富文本、媒体/任意 DOM 导入、跨浏览器草稿同步、实时多人协作或自动调用 Agent。对象模型及协议刻意保持小且可验证。
 
