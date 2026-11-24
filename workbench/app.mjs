@@ -557,7 +557,8 @@ function inspector(skip) {
   $('mixed-style').hidden=!hasMixed;
   toolDisabled('group-selection',!multiple||whole);
   toolDisabled('ungroup-selection',!selectedGroups().length);
-  toolDisabled('align-selection',!multiple||alignmentUnits(model,selection).length<2);
+  $('align-fields').hidden=!multiple;
+  $('align-fields').disabled=!multiple||alignmentUnits(model,selection).length<2;
   toolDisabled('duplicate',!items.length);toolDisabled('delete',!items.length);
   const objects=model.objects;
   toolDisabled('raise',!objects.some((item,i)=>selection.has(item.id)&&objects[i+1]&&!selection.has(objects[i+1].id)));
@@ -743,14 +744,10 @@ function groupSelection(makeGroup){
   announce(makeGroup?`已组合 ${selection.size} 个对象。`:'已取消组合。');
 }
 action('group-selection',()=>groupSelection(true));action('ungroup-selection',()=>groupSelection(false));
-const alignDialog=$('align-dialog');
-action('align-selection',()=>{if(!busy&&!pointer)alignDialog.showModal();});
-action('align-cancel',()=>alignDialog.close());
 on('align-options','click',e=>{
   const button=e.target.closest('button[data-align]');
   if(!button||busy||pointer)return;
   const objects=alignSelection(model,selection,button.dataset.align);
-  alignDialog.close();
   if(objects!==model.objects){commit({...model,objects});announce(`已${button.textContent}。`);}
   else announce('对象已对齐。');
 });

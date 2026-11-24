@@ -19,7 +19,7 @@ Use this reference only when HTML UI, layout, interaction, player behavior, or a
 - Target pages render without overlap, clipped controls, blank canvases, or broken assets.
 - Interaction relevant to the change works: selection, edit, layer movement, player navigation, or animation as applicable.
 - For editor page navigation, use a temporary multi-page copy: verify button and arrow-key navigation across sections, first/last limits, object nudging when selected, and draft recovery on return. Keep the bundled single-page example unchanged.
-- Verify page deletion in a temporary copy: cancel, last-page guard, draft guard, fallback page, and source backup. Verify multi-selection alignment against the selection bounds, group preservation, and undo.
+- Verify page deletion in a temporary copy: cancel, last-page guard, draft guard, fallback page, and source backup. Verify that the right-hand Properties panel shows alignment for multiple selections only, then check alignment against the selection bounds, group preservation, and undo.
 - Narrow and wide desktop viewports behave as intended; check mobile layout only when the change affects it.
 - Open exported HTML/PDF when the task concerns export fidelity. For mixed formats, check the PDF page count, order, and individual page sizes (e.g. `pdfinfo -f 1 -l <page-count>`). Check fit and a zoom level that requires scrolling; zoom must not change source geometry.
 

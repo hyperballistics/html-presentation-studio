@@ -51,7 +51,6 @@
     <div class="tool-group" role="group" aria-label="组合">
       <span class="tool-separator" role="separator" aria-orientation="vertical"></span>
       <button type="button" id="group-selection" title="组合 (Ctrl/⌘+G)">组合</button><button type="button" id="ungroup-selection" title="取消组合 (Ctrl/⌘+Shift+G)">取消组合</button>
-      <button type="button" id="align-selection" aria-haspopup="dialog" aria-disabled="true">对齐对象</button>
     </div>
     <div class="tool-group" role="group" aria-label="格式刷">
       <span class="tool-separator" role="separator" aria-orientation="vertical"></span>
@@ -110,6 +109,15 @@
     <div class="panel-title sidebar-header"><h2>属性</h2><button type="button" class="fold" id="toggle-right" aria-controls="properties" aria-expanded="true" aria-label="收起属性" title="收起属性"><span aria-hidden="true"></span></button></div>
     <div id="properties" class="panel-body">
       <div class="object-header"><span class="object-symbol" id="object-type" aria-hidden="true">T</span><div><h2 id="object-name">页面</h2><code id="object-id"></code></div></div>
+      <fieldset id="align-fields" class="group" hidden>
+        <legend class="sr">对齐对象</legend>
+        <h3 aria-hidden="true">对齐对象</h3>
+        <div class="pairs" id="align-options">
+          <button type="button" data-align="left">左对齐</button><button type="button" data-align="top">顶端对齐</button>
+          <button type="button" data-align="center">水平居中</button><button type="button" data-align="middle">垂直居中</button>
+          <button type="button" data-align="right">右对齐</button><button type="button" data-align="bottom">底端对齐</button>
+        </div>
+      </fieldset>
       <details class="animation-panel">
         <summary>动画</summary>
         <fieldset><legend>切换动画</legend><label class="sr" for="page-effect">页面切换效果</label><select id="page-effect"><option value="">无</option><option value="fade">淡入</option><option value="slide">滑入</option><option value="zoom">缩放进入</option></select></fieldset>
@@ -154,16 +162,6 @@
     <p id="outline-status" role="status"></p>
     <div class="dialog-actions"><button type="button" id="outline-cancel">取消</button><button class="primary" id="outline-submit" type="submit">确认</button></div>
   </form>
-</dialog>
-<dialog id="align-dialog" aria-labelledby="align-title">
-  <h2 id="align-title">对齐对象</h2>
-  <p>以所选对象的整体边界为基准。</p>
-  <div class="pairs" id="align-options">
-    <button type="button" data-align="left" autofocus>左对齐</button><button type="button" data-align="top">顶端对齐</button>
-    <button type="button" data-align="center">水平居中</button><button type="button" data-align="middle">垂直居中</button>
-    <button type="button" data-align="right">右对齐</button><button type="button" data-align="bottom">底端对齐</button>
-  </div>
-  <div class="dialog-actions"><button type="button" id="align-cancel">取消</button></div>
 </dialog>
 <dialog id="review-dialog" aria-labelledby="review-title"><h2 id="review-title">核对变更</h2><pre id="diff" tabindex="0" aria-label="变更明细"></pre><div class="dialog-actions"><button id="cancel-review">取消</button><button class="primary" id="approve">确认</button></div><p id="dialog-status" role="status"></p></dialog>
 
