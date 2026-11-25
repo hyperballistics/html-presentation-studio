@@ -165,7 +165,18 @@
 </dialog>
 <dialog id="review-dialog" aria-labelledby="review-title"><h2 id="review-title">核对变更</h2><pre id="diff" tabindex="0" aria-label="变更明细"></pre><div class="dialog-actions"><button id="cancel-review">取消</button><button class="primary" id="approve">确认</button></div><p id="dialog-status" role="status"></p></dialog>
 
-<dialog id="conflict-dialog" aria-labelledby="conflict-title"><h2 id="conflict-title">源文件比草稿更新</h2><div class="dialog-actions"><button id="cancel-conflict">取消</button><button id="recover" aria-haspopup="dialog" class="primary">导出草稿并载入源文件</button></div></dialog>
+<dialog id="conflict-dialog" aria-labelledby="conflict-title" aria-describedby="conflict-details">
+  <h2 id="conflict-title">源文件比草稿更新</h2>
+  <p id="conflict-details">当前草稿不能覆盖更新后的源文件。可以另存 HTML 副本，或丢弃草稿并载入最新源文件。</p>
+  <p id="conflict-status" role="status"></p>
+  <div class="dialog-actions"><button type="button" id="cancel-conflict" autofocus>取消</button><button type="button" id="discard-conflict" aria-haspopup="dialog">丢弃草稿…</button><button type="button" id="save-conflict-copy" aria-haspopup="dialog" class="primary">另存草稿副本</button></div>
+</dialog>
+<dialog id="discard-dialog" aria-labelledby="discard-title" aria-describedby="discard-details">
+  <h2 id="discard-title">丢弃当前草稿？</h2>
+  <p id="discard-details">将载入最新源文件。当前标签页未写回的修改无法撤销；源文件不会被改动。</p>
+  <p id="discard-status" role="status"></p>
+  <div class="dialog-actions"><button type="button" id="cancel-discard" autofocus>取消</button><button type="button" id="confirm-discard">丢弃并载入最新源文件</button></div>
+</dialog>
 </div>
 <main id="player" class="player" aria-label="播放模式" hidden>
   <div id="present-stage" class="present-stage" tabindex="-1"><div id="present-frame" class="frame"><div id="present-slide" class="slide" aria-label="当前幻灯片"></div></div></div>

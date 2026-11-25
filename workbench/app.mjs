@@ -52,7 +52,7 @@ async function api(url, options={}) {
 }
 function banner(message, retry=false) {
   const el=$('banner'); el.hidden=!message; el.textContent=message||'';
-  if(retry){const b=make('button','','处理版本冲突'); b.onclick=()=>$('conflict-dialog').showModal(); el.append(b);}
+  if(retry){const b=make('button','','处理版本冲突'); b.onclick=()=>{if(!busy){$('conflict-status').textContent='';$('conflict-dialog').showModal();}}; el.append(b);}
 }
 function contextStatus(text,warn=false) {
   const el=$('context-status');el.classList.toggle('warn',warn);el.textContent=text;
@@ -70,6 +70,7 @@ function refreshStatus() {
   toolDisabled('sync-context',!model||busy);
   $('edit-prev-page').disabled=busy||!adjacentPage(-1);
   $('edit-next-page').disabled=busy||!adjacentPage(1);
+  $('confirm-discard').disabled=busy;$('cancel-discard').disabled=busy;
 }
 function persist() {
   try {
@@ -250,7 +251,8 @@ function layers() {
     b.setAttribute('aria-pressed',String(selection.has(o.id))); b.title=o.id;
     const glyph=make('span','layer-icon',symbols[o.type]);glyph.setAttribute('aria-hidden','true');
     const name=o.type==='arrow'?'箭头 · '+o.id.slice(6,14):o.text.split('\n')[0]||o.id;
-    b.append(glyph,make('span','layer-name',name));
+    const label=make('span','layer-name',name);label.title=name;
+    b.append(glyph,label);
     if(memberships.has(o.id)){const mark=make('span','layer-group-mark',`G${memberships.get(o.id)}`);mark.setAttribute('aria-label',`组合 ${memberships.get(o.id)}`);b.append(mark);}
     b.onclick=e=>selectObject(o.id,modifier(e));
     const handle=make('button','layer-grip');handle.type='button';handle.dataset.grip=o.id;
@@ -431,7 +433,8 @@ function pageListItem(section,p,index,n) {
   const row=make('div','page-row'), b=make('button','page-select'), grip=make('button','page-grip','⠿');
   b.type=grip.type='button';b.dataset.page=p.id;grip.dataset.pageGrip=p.id;
   const thumb=make('span','thumb');thumb.setAttribute('aria-hidden','true');
-  thumb.dataset.pageId=p.id;b.append(thumb,make('span','',`${n} · ${p.title}`));
+  b.title=`${n} · ${p.title}`;
+  thumb.dataset.pageId=p.id;b.append(thumb,make('span','page-label',b.title));
   if(p.id===model.id){b.setAttribute('aria-current','page');$('page-badge').textContent=n;}
   else lazyThumbs.observe(thumb);
   b.onclick=()=>{if(p.id!==model.id&&!busy)void openPage(p.id);};
@@ -475,7 +478,7 @@ function drawOutline() {
   for(const section of catalog.sections) {
     const row=make('div','page-section'), detail=make('details'), summary=make('summary','section-tag');
     row.dataset.section=section.id;
-    summary.append(make('span','',section.title));
+    summary.title=section.title;summary.append(make('span','section-label',section.title));
     detail.open=expanded.get(section.id)??true;
     if(!expanded.has(section.id))try{detail.open=localStorage.getItem(sectionKey(section.id))!=='closed';}catch{}
     const remember=open=>{if(detail.isConnected)try{localStorage.setItem(sectionKey(section.id),open?'open':'closed');}catch{}};
@@ -685,22 +688,33 @@ function turnEditorPage(offset) {
 }
 action('edit-prev-page',()=>turnEditorPage(-1));
 action('edit-next-page',()=>turnEditorPage(1));
-async function openPage(id,{recover=false,selectDefault=true}={}) {
+const draftKey=id=>`html-studio:v1:${catalog.workspace_key}:${id}`;
+function tabDraftKey(key){
+  const alias=sessionStorage.getItem(key);
+  return alias?.startsWith(key+':')?alias:key;
+}
+async function openPage(id,{discardDraft=false,selectDefault=true}={}) {
   if(busy)return;
   busy=true;
-  if(model&&!recover)persist();else refreshStatus();
+  if(model&&!discardDraft)persist();else refreshStatus();
   try {
     const result=await api(endpoint(id));
-    if(recover) {
-      try {if(localStorage.getItem(storageKey)===cached)localStorage.removeItem(storageKey);sessionStorage.removeItem(baseKey);} catch {}
+    const key=draftKey(id);
+    let draft=null;
+    if(discardDraft){
+      // Do not clear the draft before the latest source is available, or erase another tab's bytes.
+      const stored=localStorage.getItem(storageKey);
+      if(stored!==null&&stored!==cached){
+        sessionStorage.setItem(key,key+':'+crypto.randomUUID());
+      }else if(stored!==null){
+        localStorage.removeItem(storageKey);
+      }
     }
-    const key=`html-studio:v1:${catalog.workspace_key}:${id}`;
-    let draft=null; baseKey=key; storageKey=key; cached=null; storageOK=true;
+    baseKey=key;storageKey=key;cached=null;storageOK=true;
     try {
-      const alias=sessionStorage.getItem(key);
-      if(alias?.startsWith(key+':')&&localStorage.getItem(alias))storageKey=alias;
+      storageKey=tabDraftKey(key);
       cached=localStorage.getItem(storageKey);
-      if(cached&&!recover){draft=JSON.parse(cached);validate(draft.model,id);}
+      if(cached){draft=JSON.parse(cached);validate(draft.model,id);}
     } catch {draft=null;storageOK=false;}
     source=result; draftBase=draft?.base||result.revision; model=draft?.model||result.model; forked=storageKey!==key;
     stale=!!draft&&draft.base!==source.revision&&dirty(); history=[];future=[];group='';sampling=null;
@@ -710,7 +724,11 @@ async function openPage(id,{recover=false,selectDefault=true}={}) {
     $('stage').scrollTo(0,0);drawOutline();render();
     for(const id of ['workspace','top-actions','ribbon']) $(id).inert=false;
     return true;
-  } catch(e) {banner(e.message);return false;}
+  } catch(e) {
+    if(discardDraft)$('discard-status').textContent=`未能载入最新源文件，草稿仍保留。${e.message}`;
+    else banner(e.message);
+    return false;
+  }
   finally {busy=false;if(model)refreshStatus();}
 }
 function timeTravel(from,to) {if(!from.length||busy||pointer)return;to.push(model);model=from.pop();group='';sampling=null;select(model.objects.filter(o=>selection.has(o.id)).map(o=>o.id),false);persist();render();}
@@ -1188,8 +1206,7 @@ async function pageSnapshot(id) {
   if(id===model.id)return model;
   let draft;
   try {
-    const key=`html-studio:v1:${catalog.workspace_key}:${id}`, alias=sessionStorage.getItem(key);
-    draft=JSON.parse((alias?.startsWith(key+':')&&localStorage.getItem(alias))||localStorage.getItem(key));
+    draft=JSON.parse(localStorage.getItem(tabDraftKey(draftKey(id))));
     if(draft) return validate(draft.model,id);
   } catch { /* A corrupt or inaccessible browser draft must not prevent reading the saved page. */ }
   return (await api(endpoint(id))).model;
@@ -1294,7 +1311,7 @@ async function exportDeckPDF(filename,destination){
   if(viaRoot)return (await res.json()).file;
   return deliverBlob(await res.blob(),filename,destination);
 }
-async function requestExport(format,{recover=false}={}){
+async function requestExport(format,{conflictCopy=false}={}){
   if(busy||choosingExport)return;
   inline?.blur();
   const snapshot=model, label=format.toUpperCase();
@@ -1306,30 +1323,41 @@ async function requestExport(format,{recover=false}={}){
   finally{choosingExport=false;}
   if(!destination)return;
   busy=true;refreshStatus();
-  const buttons=['export','edit-export-pdf','export-pdf','recover'].map($);
+  const buttons=['export','edit-export-pdf','export-pdf','save-conflict-copy'].map($);
   for(const button of buttons)button.disabled=true;
   if(player.hidden)status(`正在导出 ${label}…`);else playStatus(`正在导出 ${label}…`,'pdf');
-  let saved=false;
   try{
     const file=format==='html'?await exportHTML(snapshot,filename,destination):await exportDeckPDF(filename,destination);
     if(file)exportLocation(`已保存 ${label}`,file);
     if(!player.hidden)playStatus(file?`已保存 ${label} · ${file}`:'','pdf');
     announce(file?`已保存 ${label}。`:`${label} 导出已提交。`);
-    saved=true;
+    if(conflictCopy)$('conflict-status').textContent=file?'已另存副本，当前草稿仍保留。':'已发起下载，当前草稿仍保留。请确认下载完成后再丢弃。';
   }catch(e){
-    if(recover)$('conflict-dialog').close();
-    if(player.hidden)banner(e.message,stale);else playStatus(e.message,'pdf');
+    if(conflictCopy)$('conflict-status').textContent=`另存失败，当前草稿仍保留。${e.message}`;
+    else if(player.hidden)banner(e.message,stale);else playStatus(e.message,'pdf');
   }finally{
     busy=false;refreshStatus();
     for(const button of buttons)button.disabled=false;
   }
-  if(recover&&saved){$('conflict-dialog').close();await openPage(snapshot.id,{recover:true});}
 }
 action('export',()=>requestExport('html'));
 for(const id of ['edit-export-pdf','export-pdf'])action(id,()=>requestExport('pdf'));
 action('cancel-conflict',()=>{if(!busy)$('conflict-dialog').close();});
 on('conflict-dialog','cancel',e=>{if(busy)e.preventDefault();});
-action('recover',()=>requestExport('html',{recover:true}));
+action('save-conflict-copy',()=>requestExport('html',{conflictCopy:true}));
+action('discard-conflict',()=>{
+  if(busy||choosingExport)return;
+  $('discard-status').textContent='';$('discard-dialog').showModal();
+});
+action('cancel-discard',()=>{if(!busy)$('discard-dialog').close();});
+on('discard-dialog','cancel',e=>{if(busy)e.preventDefault();});
+action('confirm-discard',async()=>{
+  if(busy||!stale)return;
+  if(await openPage(model.id,{discardDraft:true})){
+    $('discard-dialog').close();$('conflict-dialog').close();
+    $('slide').focus({preventScroll:true});announce('已丢弃当前草稿并载入最新源文件。');
+  }else $('cancel-discard').focus();
+});
 window.addEventListener('beforeunload',e=>{if(model&&dirty()&&!storageOK){e.preventDefault();e.returnValue='';}});
 function changes(before,after) {
   const lines=[]; const show=(v,k)=>k==='image'&&v?`内嵌图片（${v.length} 字符）`:typeof v==='string'?v:JSON.stringify(v);

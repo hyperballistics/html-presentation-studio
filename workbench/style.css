@@ -135,7 +135,6 @@ body.printing #print-deck{display:block;position:absolute;left:-1000000px;top:0}
 .outline-tools button{min-height:26px;padding:2px 7px;color:var(--accent);font-size:11px}
 .page-section{position:relative;margin-block:3px 5px;min-width:0}
 .section-tag{display:flex;align-items:center;gap:4px;min-height:30px;padding:3px 77px 3px 4px;cursor:pointer;list-style:none;color:#173b59;font-size:11px;font-weight:700}
-.section-tag span{overflow-wrap:anywhere}
 .section-tag::-webkit-details-marker{display:none}
 .section-tag::before{content:'';flex:none;width:5px;height:5px;margin-inline-end:3px;border:solid var(--accent);border-width:1px 1px 0 0;transform:rotate(45deg)}
 .page-section details[open]>.section-tag::before{transform:translateY(-1px) rotate(135deg)}
@@ -143,7 +142,7 @@ body.printing #print-deck{display:block;position:absolute;left:-1000000px;top:0}
 .section-action,.page-grip,.page-remove{border-color:transparent;color:var(--accent);background:transparent}
 .section-action{min-height:24px;width:24px;padding:0;font-size:14px}
 .page-row{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:2px;margin-block:3px}
-.outline .page-select{min-width:0;margin:0;overflow-wrap:anywhere}
+.outline .page-select{grid-template-columns:minmax(0,1fr);min-width:0;margin:0}
 .page-grip{min-height:26px;padding:0 3px;cursor:grab;-webkit-user-select:none;user-select:none}
 .page-remove{min-height:26px;padding:0 4px;color:#ae0d1b}
 .page-grip[data-dragging]{cursor:grabbing;opacity:.4}
@@ -201,7 +200,7 @@ body.printing #print-deck{display:block;position:absolute;left:-1000000px;top:0}
 .marquee{z-index:3;border:2px solid var(--accent);background:#065fa91c}
 .layer-select{display:flex;align-items:center;gap:3px}
 .layer-select .layer-icon,.layer-group-mark{flex:none}
-.layer-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.section-label,.page-label,.layer-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .layer-group-mark{margin-inline-start:auto;color:var(--accent);font:700 10px/1.3 ui-monospace,monospace}
 .animation-panel select{margin-block:2px 3px}
 .animation-panel .chip{display:inline-block;margin-block:2px}
@@ -211,3 +210,6 @@ body.printing #print-deck{display:block;position:absolute;left:-1000000px;top:0}
 #slide svg[data-selected] .arrow-hit{stroke:#065fa952}
 
 .source-link{color:inherit;text-decoration:underline;text-underline-offset:.14em}.source-link:focus-visible{outline:2px solid #065FA9;outline-offset:-1px}
+
+:is(#conflict-dialog,#discard-dialog) .dialog-actions{flex-wrap:wrap}
+#conflict-status:empty,#discard-status:empty{display:none}
