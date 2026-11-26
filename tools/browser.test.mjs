@@ -200,13 +200,75 @@ regression('writeback-and-backup',async({root,open})=>{
 
 regression('writeback-conflict',async({root,open})=>{
   const page=await open(), other=await open();
+  const localBytes=()=>page.evaluate(id=>Object.entries(localStorage).find(([key])=>
+    key.startsWith('html-studio:v1:')&&key.endsWith(`:${id}`))?.[1],first);
+  const openConflict=()=>el(page,'open-conflict').click();
+  const pageAPI=`/api/pages/${first}`;
   await notes(page,'应该保留的旧草稿');await review(page);
-  await notes(other,'获准写回的新版本');await review(other);await approve(other,200);
+  const originalDraft=await localBytes();
+  await notes(other,'获准写回的新版本');
+  await el(other,'add-text').click();
+  await el(other,'object-text').fill('磁盘上的新对象文字');
+  await review(other);await approve(other,200);
   await waitStatus(other,'与源文件一致');const current=await saved(root,first);
+  const {revision,modified_at}=await (await page.request.get(new URL(pageAPI,page.url()).href)).json();
   await approve(page,412);await waitStatus(page,'版本冲突 · 草稿保留');
   assert.equal(await el(page,'approve').isDisabled(),true);
   await el(page,'cancel-review').click();
-  await page.getByRole('button',{name:'处理版本冲突'}).click();
+  const assertSource=async()=>{
+    await el(page,'slide').getByText('磁盘上的新对象文字',{exact:true}).waitFor();
+    assert.equal(await el(page,'notes').inputValue(),'获准写回的新版本');
+    assert.equal(await el(page,'notes').evaluate(node=>node.readOnly),true);
+    assert.equal(await el(page,'edit-tools').evaluate(node=>node.inert),true);
+    assert.equal(await el(page,'save').getAttribute('aria-disabled'),'true');
+  };
+  await assertSource();
+  await page.reload();await waitStatus(page,'版本冲突 · 草稿保留');await assertSource();
+  assert.equal(await el(page,'conflict-workspace').textContent(),'Browser regression');
+  assert.equal(await el(page,'conflict-page').textContent(),`${source.title}（${first}）`);
+  assert.equal(await el(page,'conflict-base').getAttribute('title'),JSON.parse(originalDraft).base);
+  assert.equal(await el(page,'conflict-disk').textContent(),revision.slice(7,19));
+  assert.equal(await el(page,'conflict-disk-time').getAttribute('datetime'),modified_at);
+  const {base_modified_at}=JSON.parse(originalDraft);
+  assert.ok(Number.isFinite(Date.parse(base_modified_at)));
+  assert.equal(await el(page,'conflict-base-time').getAttribute('datetime'),base_modified_at);
+  assert.equal(await el(page,'conflict-disk').getAttribute('title'),revision);
+  await el(page,'slide').focus();await page.keyboard.press('Delete');
+  await page.keyboard.press('ArrowRight');await page.locator(`[data-page="${second}"][aria-current]`).waitFor();
+  await go(page,first);await assertSource();
+  await el(page,'present').click();await el(page,'present-slide').getByText('磁盘上的新对象文字').waitFor();
+  await el(page,'close-present').click();
+  await el(page,'export').click();
+  const sourceDownload=page.waitForEvent('download');
+  await el(page,'choose-export-download').click();
+  const sourceExport=await sourceDownload;
+  assert.equal(sourceExport.suggestedFilename(),`${first}.html`);
+  assert.match(await readFile(await sourceExport.path(),'utf8'),/磁盘上的新对象文字/);
+  await page.waitForFunction(()=>!document.getElementById('export').disabled);
+  if(process.env.STUDIO_CONFLICT_SCREENSHOTS){
+    await page.screenshot({path:join(process.env.STUDIO_CONFLICT_SCREENSHOTS,'studio-conflict-desktop.png')});
+    await page.setViewportSize({width:320,height:760});
+    await openConflict();
+    await page.screenshot({path:join(process.env.STUDIO_CONFLICT_SCREENSHOTS,'studio-conflict-mobile.png')});
+    await el(page,'cancel-conflict').click();
+    await page.setViewportSize({width:1440,height:900});
+  }
+  await openConflict();await el(page,'view-conflict-draft').click();
+  await el(page,'slide').getByText('磁盘上的新对象文字',{exact:true}).waitFor({state:'detached'});
+  await el(page,'slide').getByText('组合文字',{exact:true}).waitFor();
+  assert.equal(await el(page,'notes').inputValue(),'应该保留的旧草稿');
+  assert.equal(await el(page,'notes').evaluate(node=>node.readOnly),false);
+  assert.equal(await localBytes(),originalDraft);
+  // A failed source read preserves the draft and supports retry in the same dialog.
+  await openConflict();
+  await page.route(`**${pageAPI}`,route=>route.fulfill({status:503,json:{error:'测试读取失败'}}),{times:1});
+  await el(page,'view-conflict-source').click();
+  await el(page,'conflict-status').getByText(/无法读取最新源文件/).waitFor();
+  assert.equal(await localBytes(),originalDraft);
+  await el(page,'view-conflict-source').click();await assertSource();
+  assert.equal(await localBytes(),originalDraft);
+  assert.equal(await saved(root,first),current);
+  await openConflict();
   await el(page,'save-conflict-copy').click();
   const download=page.waitForEvent('download');
   await el(page,'choose-export-download').click();
@@ -223,6 +285,33 @@ regression('writeback-conflict',async({root,open})=>{
   assert.equal(await el(page,'notes').inputValue(),'获准写回的新版本');
   assert.equal(await draft(page,first),undefined);
   assert.equal(await saved(root,first),current);
+});
+
+regression('partial-text-color',async({root,open})=>{
+  const page=await open();
+  await el(page,'add-text').click();
+  const field=el(page,'object-text'), apply=el(page,'apply-text-color');
+  await field.fill('甲重点乙');
+  await field.evaluate(node=>node.setSelectionRange(1,1));
+  await field.press('Shift+ArrowRight');await field.press('Shift+ArrowRight');
+  await el(page,'text-range-color').fill('#c62828');
+  await apply.click();
+  const colored=el(page,'slide').locator('.object span').getByText('重点',{exact:true});
+  await colored.waitFor();
+  assert.equal(await colored.evaluate(node=>getComputedStyle(node).color),'rgb(198, 40, 40)');
+  assert.equal(await colored.locator('..').textContent(),'甲重点乙');
+  if(process.env.STUDIO_CONFLICT_SCREENSHOTS){
+    await page.screenshot({path:join(process.env.STUDIO_CONFLICT_SCREENSHOTS,'studio-partial-text-color.png')});
+  }
+  await el(page,'clear-text-color').click();await colored.waitFor({state:'detached'});
+  await el(page,'undo').click();await colored.waitFor();
+  await page.reload();await waitStatus(page,'草稿已自动保存');await colored.waitFor();
+  await el(page,'present').click();await el(page,'present-slide').locator('.object span').getByText('重点').waitFor();
+  await el(page,'close-present').click();await review(page);await approve(page,200);
+  await waitStatus(page,'与源文件一致');
+  const html=await saved(root,first);
+  assert.match(html,/甲<span style="color:#c62828">重点<\/span>乙/);
+  assert.deepEqual(readHTML(html,first).objects.at(-1).textColors,[{start:1,end:3,color:'#c62828'}]);
 });
 
 const third={...target,id:'p03-browser',title:'跳过本页'};

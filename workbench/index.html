@@ -32,6 +32,14 @@
   </div>
 </header>
 <div id="banner" role="alert" hidden></div>
+<div id="conflict-banner" hidden>
+  <div class="conflict-summary" role="status">
+    <p><strong>源文件已更新，草稿已保留，禁止直接覆盖。</strong> <span id="conflict-view"></span></p>
+    <p class="conflict-identity"><span>工作区 <strong id="conflict-workspace"></strong></span><span>页面 <strong id="conflict-page"></strong></span></p>
+    <p class="conflict-versions"><span>草稿基于 <code id="conflict-base"></code> <time id="conflict-base-time"></time></span><span>当前磁盘版本 <code id="conflict-disk"></code> <time id="conflict-disk-time"></time></span></p>
+  </div>
+  <button type="button" id="open-conflict" aria-haspopup="dialog">处理版本冲突</button>
+</div>
 <div class="ribbon" id="ribbon" inert>
   <div class="edit-tools" id="edit-tools" role="toolbar" aria-label="对象编辑" aria-controls="slide" focusgroup="toolbar wrap">
     <div class="tool-group" role="group" aria-label="历史">
@@ -134,6 +142,14 @@
       <span id="mixed-style" class="chip" hidden>部分样式值不同</span>
       <fieldset id="object-fields" hidden><legend class="sr">对象属性</legend>
         <section class="group"><h3 id="object-text-title">文本</h3><textarea id="object-text" aria-label="对象文本" data-prop="text" rows="2" maxlength="2000"></textarea>
+          <div id="text-color-range" class="field" hidden>
+            <span id="text-color-hint">在上方选中文字，可单独设置颜色。</span>
+            <div class="swatch text-color-actions">
+              <input type="color" id="text-range-color" aria-label="选中文字的颜色">
+              <button type="button" id="apply-text-color">应用颜色</button>
+              <button type="button" id="clear-text-color">恢复默认</button>
+            </div>
+          </div>
           <label id="object-href-row" class="field" hidden>来源链接（HTTPS）<input id="object-href" data-prop="href" type="url" maxlength="2048" placeholder="https://…"></label>
           <div class="pairs"><label class="field">字体<select data-prop="font"><option value="sans">默认混排</option><option value="han">思源黑体 SC</option><option value="serif">衬线</option><option value="mono">等宽</option></select></label><label class="field">字号<input type="number" data-prop="size" min="10" max="160" step="1"></label></div>
           <div class="toggles" role="group" aria-label="字形"><button data-toggle="bold" aria-label="加粗" aria-pressed="false"><b>B</b></button><button data-toggle="italic" aria-label="斜体" aria-pressed="false"><i>I</i></button><button data-toggle="underline" aria-label="下划线" aria-pressed="false"><u>U</u></button></div>
@@ -171,7 +187,11 @@
 
 <dialog id="conflict-dialog" aria-labelledby="conflict-title" aria-describedby="conflict-details">
   <h2 id="conflict-title">源文件比草稿更新</h2>
-  <p id="conflict-details">当前草稿不能覆盖更新后的源文件。可以另存 HTML 副本，或丢弃草稿并载入最新源文件。</p>
+  <p id="conflict-details">可以在两个版本之间切换，草稿会保留。查看源文件时为只读，旧草稿仍可本地编辑。</p>
+  <div class="conflict-switch" role="group" aria-label="选择预览版本">
+    <button type="button" id="view-conflict-source">查看最新源文件</button>
+    <button type="button" id="view-conflict-draft">查看旧草稿</button>
+  </div>
   <p id="conflict-status" role="status"></p>
   <div class="dialog-actions"><button type="button" id="cancel-conflict" autofocus>取消</button><button type="button" id="discard-conflict" aria-haspopup="dialog">丢弃草稿…</button><button type="button" id="save-conflict-copy" aria-haspopup="dialog" class="primary">另存草稿副本</button></div>
 </dialog>

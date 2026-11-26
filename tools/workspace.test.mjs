@@ -9,7 +9,7 @@ import {publishHTMLDirectory} from './export-files.mjs';
 import {exportPDF} from './pdf.mjs';
 import {openWorkspace,revision} from './workspace.mjs';
 import {updateContext} from './context.mjs';
-import {proposalFor,renderHTML,renderPDFSource,readHTML,defaults,THEME,arrowGeometry,withoutObject,withoutObjects,fontAssets,validate,selectGroups,regroup,setReveal,revealStep,isHexColor,pageSize,pageFormats} from '../workbench/model.mjs';
+import {proposalFor,renderHTML,renderPDFSource,readHTML,defaults,THEME,arrowGeometry,withoutObject,withoutObjects,fontAssets,validate,selectGroups,regroup,setReveal,revealStep,isHexColor,pageSize,pageFormats,setTextColor,replaceObjectText} from '../workbench/model.mjs';
 import {selectionBounds,boxHits,transformSelection,fitToPage,alignSelection} from '../workbench/selection.mjs';
 const id='p01-fixture', section='01-test', folder=`sections/${section}`, name=`${folder}/pages/${id}.html`;
 const original={id,title:'Fixture',background:THEME.paper,notes:'',objects:[{...defaults,id:'hero-title',type:'text',x:70,y:70,text:'测试页'}]};
@@ -39,6 +39,22 @@ test('print document uses ordered projections, retains text, and omits notes and
   assert.ok(html.indexOf('p01-fixture')<html.indexOf('p02-fixture'));
   assert.match(html,/第二页 &lt;img src=x&gt;/);
   assert.doesNotMatch(html,/PRIVATE SPEAKER NOTES|<img|<script|<button/);
+});
+
+test('partial text colors survive projections, shifting edits and range clearing',()=>{
+  const object={...original.objects[0],text:'甲😀<乙>丙'};
+  const colored=setTextColor(object,1,6,'#e02040');
+  const model={...original,objects:[colored]};
+  assert.match(renderHTML(model),/<span style="color:#e02040">😀&lt;乙&gt;<\/span>/);
+  assert.match(renderPDFSource([model],''),/color:#e02040/);
+  assert.deepEqual(readHTML(renderHTML(model),id),model);
+  assert.deepEqual(replaceObjectText(colored,'前甲😀<乙>丙').textColors,[{start:2,end:7,color:'#e02040'}]);
+  assert.deepEqual(replaceObjectText(colored,'甲😀<新乙>丙').textColors,[{start:1,end:7,color:'#e02040'}]);
+  assert.deepEqual(setTextColor(colored,3,6).textColors,[{start:1,end:3,color:'#e02040'}]);
+  assert.equal(setTextColor(colored,0,object.text.length).textColors,undefined);
+  for(const range of [{start:2,end:3,color:'#e02040'},{start:1,end:3,color:'red;position:absolute'}]){
+    assert.throws(()=>validate({...original,objects:[{...colored,textColors:[range]}]}),/局部文字颜色/);
+  }
 });
 
 test('page formats round-trip, enforce box and endpoint bounds, and preserve mixed PDF paper sizes',()=>{
@@ -209,6 +225,7 @@ test('loopback API: task receipt, guarded atomic write, competing writer 412, ba
   const get=await fetch(url), etag=get.headers.get('etag');
   assert.match(get.headers.get('content-security-policy'),/img-src 'self' data:/);
   const info=await get.json();assert.equal(info.file,name);assert.equal(info.absolute_file,await realpath(join(dir,name)));assert.equal(etag,`"${info.revision}"`);
+  assert.equal(info.modified_at,(await stat(join(dir,name))).mtime.toISOString());
   const hdr={'Content-Type':'application/json',Origin:origin};
   const pdf=(models,originHeader=origin)=>fetch(`${origin}/api/pdf`,{method:'POST',headers:{...hdr,Origin:originHeader},body:JSON.stringify(models)});
   assert.equal((await pdf([info.model],'https://elsewhere.invalid')).status,403);

@@ -125,7 +125,7 @@ export async function makeServer(root=fileURLToPath(new URL('..',import.meta.url
           }
           res.setHeader('ETag',`"${result.revision}"`);
           const {file,context,full}=result.page;
-          return send(200,{file,context,absolute_file:full,revision:result.revision,model:result.model,context_synced:result.context_synced});
+          return send(200,{file,context,absolute_file:full,revision:result.revision,modified_at:result.modifiedAt,model:result.model,context_synced:result.context_synced});
         }
         if (requests && method==='POST') {
           const body=await json(req);

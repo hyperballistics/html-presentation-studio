@@ -36,9 +36,9 @@ export async function openWorkspace(directory) {
     const page=pages.get(id);
     if (!page) throw httpError(404,'页面不存在。');
     if(await realpath(page.full)!==page.full)throw new Error('页路径已变化，不能通过符号链接读写。');
-    const html=(await fileState(page.full))?.text;
+    const {text:html,modifiedAt}=(await fileState(page.full))??{};
     const model=readHTML(html,id);
-    return {page,html,model,revision:revision(html)};
+    return {page,html,model,revision:revision(html),modifiedAt};
   }
   async function runtime(sub) {
     const base=resolve(root,'.runtime'), path=resolve(base,sub);
@@ -79,9 +79,9 @@ export async function openWorkspace(directory) {
       if(html===current.html)return current;
       await backup(current);
       if(await realpath(full)!==full)throw conflict();
-      await publish(full,html,{expected:current.html,onConflict:conflict});
+      const {modifiedAt}=await publish(full,html,{expected:current.html,onConflict:conflict,includeModifiedAt:true});
       const context_synced=await refreshContext(()=>openWorkspace(root));
-      return {...current,html,model,revision:revision(html),context_synced};
+      return {...current,html,model,revision:revision(html),modifiedAt,context_synced};
     });
   }
   const uuid=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
