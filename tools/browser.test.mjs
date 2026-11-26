@@ -4,6 +4,7 @@ import {cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile} from 'node:fs/prom
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import {once} from 'node:events';
+import {pathToFileURL} from 'node:url';
 import {chromium} from 'playwright';
 import {makeServer} from './serve.mjs';
 import {defaults, pageSize, readHTML, renderHTML, THEME} from '../workbench/model.mjs';
@@ -24,21 +25,30 @@ let browser;
 before(async()=>{browser=await chromium.launch({executablePath:process.env.STUDIO_TEST_CHROMIUM||undefined});});
 after(async()=>{await browser?.close();});
 
-function regression(name,run){
+function regression(name,run,{extraSection=[]}={}){
   test(name,{timeout:60_000},async()=>{
     const root=await mkdtemp(join(tmpdir(),'html-studio-browser-'));
     const contexts=[], errors=[];
     let server;
     try{
-      await mkdir(join(root,folder,'pages'),{recursive:true});
+      const groups=[[section,'回归测试',pages],...(extraSection.length?[['02-export','扩展分节',extraSection]]:[])];
+      const sections=[];
       await cp(new URL('../workbench/',import.meta.url),join(root,'workbench'),{recursive:true});
-      await writeFile(join(root,folder,'section.md'),'# 回归测试\n');
-      await writeFile(join(root,'deck.manifest.json'),JSON.stringify({version:1,title:'Browser regression',sections:[{
-        id:section,title:'回归测试',context:`${folder}/section.md`,pages:pages.map(({id,title})=>({id,title,file:pageFile(id)})),
-      }]}));
+      for(const [id,title,models] of groups){
+        const dir=`sections/${id}`, context=`${dir}/section.md`;
+        await mkdir(join(root,dir,'pages'),{recursive:true});
+        await writeFile(join(root,context),`# ${title}\n`);
+        const entries=[];
+        for(const model of models){
+          const file=`${dir}/pages/${model.id}.html`;
+          await writeFile(join(root,file),renderHTML(model));
+          entries.push({id:model.id,title:model.title,file});
+        }
+        sections.push({id,title,context,pages:entries});
+      }
+      await writeFile(join(root,'deck.manifest.json'),JSON.stringify({version:1,title:'Browser regression',sections}));
       await writeFile(join(root,'STORYLINE.md'),'# 回归测试\n\n| Page | Content | Role |\n|---|---|---|\n'+
-        pages.map(({id,title})=>`| \`${id}\` | ${title} | 测试 |`).join('\n')+'\n');
-      for(const model of pages)await writeFile(join(root,pageFile(model.id)),renderHTML(model));
+        [...pages,...extraSection].map(({id,title})=>`| \`${id}\` | ${title} | 测试 |`).join('\n')+'\n');
       server=await makeServer(root);server.listen(0,'127.0.0.1');await once(server,'listening');
       const open=async()=>{
         const context=await browser.newContext({viewport:{width:1440,height:900},acceptDownloads:true});
@@ -214,3 +224,98 @@ regression('writeback-conflict',async({root,open})=>{
   assert.equal(await draft(page,first),undefined);
   assert.equal(await saved(root,first),current);
 });
+
+const third={...target,id:'p03-browser',title:'跳过本页'};
+const fourth={...target,id:'p04-browser',title:'末页'};
+regression('conditional-export',async({root,open})=>{
+  const page=await open();
+  const button=el(page,'select-export'), dialog=el(page,'select-export-dialog');
+  const format=el(page,'select-export-format'), range=el(page,'select-export-range');
+  const next=el(page,'select-export-next'), summary=el(page,'select-export-summary');
+  const choose=label=>dialog.getByRole('checkbox',{name:label});
+  const download=async()=>{
+    await next.click();
+    const pending=page.waitForEvent('download');
+    await el(page,'choose-export-download').click();
+    return pending;
+  };
+  assert.equal(await page.locator('#edit-export-pdf + #select-export').count(),1);
+  await layer(page,'edge').click();
+  await el(page,'object-text').fill('条件导出的浏览器草稿');
+  await el(page,'object-text').press('Tab');
+  await waitStatus(page,'草稿已自动保存');
+  await button.click();
+  assert.equal(await next.isDisabled(),true);
+  assert.equal(await format.evaluate(node=>document.activeElement===node),true);
+  await range.fill('3-2');
+  assert.match(await summary.innerText(),/起点不得大于终点/);
+  await range.fill('5');
+  assert.equal(await next.isDisabled(),true);
+  await page.keyboard.press('Escape');
+  await dialog.waitFor({state:'hidden'});
+  assert.equal(await button.evaluate(node=>document.activeElement===node),true);
+
+  await button.click();
+  await choose('回归测试（2 页）').check();
+  assert.equal(await choose(/2\. 浏览器回归目标页/).isChecked(),true);
+  await choose(/2\. 浏览器回归目标页/).uncheck();
+  assert.equal(await choose('回归测试（2 页）').evaluate(node=>node.indeterminate),true);
+  await choose('回归测试（2 页）').check();
+  await range.fill('4、1-2');
+  await format.selectOption('html');
+  assert.match(await summary.innerText(),/3 页.*离线 HTML/);
+  if(process.env.STUDIO_EXPORT_PREVIEW){
+    await page.screenshot({path:join(process.env.STUDIO_EXPORT_PREVIEW,'conditional-export.png')});
+    await page.setViewportSize({width:390,height:680});
+    const bounds=await dialog.boundingBox();
+    assert.ok(bounds.x>=0&&bounds.x+bounds.width<=390&&bounds.y+bounds.height<=680);
+    await page.screenshot({path:join(process.env.STUDIO_EXPORT_PREVIEW,'conditional-export-narrow.png')});
+    await page.setViewportSize({width:1440,height:900});
+  }
+  const deck=await download();
+  assert.match(deck.suggestedFilename(),/选页\.html$/);
+  const deckPath=join(root,'exported.html');
+  await deck.saveAs(deckPath);
+  const offline=await browser.newContext({offline:true});
+  try {
+    const exported=await offline.newPage();
+    await exported.goto(pathToFileURL(deckPath).href);
+    assert.deepEqual(await exported.locator('.slide').evaluateAll(nodes=>nodes.map(node=>node.dataset.pageId)),[first,second,fourth.id]);
+    assert.match(await exported.locator(`#page-${first}`).innerText(),/条件导出的浏览器草稿/);
+    assert.equal(await exported.locator('#font-licenses').count(),1);
+    assert.equal(await exported.evaluate(async()=>{
+      await document.fonts.load('14px "Source Han Sans SC"','浏览');
+      return [...document.fonts].some(font=>font.family==='Source Han Sans SC'&&font.status==='loaded');
+    }),true);
+    await exported.getByRole('link',{name:'3. 末页'}).click();
+    assert.equal(new URL(exported.url()).hash,`#page-${fourth.id}`);
+    if(process.env.STUDIO_EXPORT_PREVIEW){
+      await exported.screenshot({path:join(process.env.STUDIO_EXPORT_PREVIEW,'exported-multipage.png')});
+      await deck.saveAs(join(process.env.STUDIO_EXPORT_PREVIEW,'exported-multipage.html'));
+    }
+  } finally {await offline.close();}
+
+  await button.click();await format.selectOption('html');
+  await choose(/4\. 末页/).check();
+  const html=await download();
+  assert.equal(html.suggestedFilename(),`${fourth.id}.html`);
+  const htmlBytes=await readFile(await html.path(),'utf8');
+  assert.match(htmlBytes,/data:font\/woff2;base64,/);
+  assert.deepEqual(JSON.parse(htmlBytes.match(/<script type="application\/json" id="slide-model">([\s\S]*?)<\/script>/)[1]),fourth);
+  await button.click();await el(page,'select-export-current').click();
+  await el(page,'select-export-clear').click();assert.equal(await next.isDisabled(),true);
+  await range.fill('4, 1-2');
+  // Exercise the selected-page PDF fallback without needing a system PDF renderer in CI.
+  await page.evaluate(()=>{window.print=()=>{window.printedPages=[...document.querySelectorAll('#print-deck .slide')].map(slide=>slide.dataset.pageId);};});
+  await page.route('**/api/pdf?*',async route=>{
+    const {models,manifest_revision}=route.request().postDataJSON();
+    assert.deepEqual(models.map(model=>model.id),[first,second,fourth.id]);
+    assert.match(manifest_revision,/^sha256:/);
+    await route.fulfill({status:501,json:{error:'No renderer'}});
+  });
+  await next.click();await el(page,'choose-export-download').click();
+  await page.waitForFunction(()=>window.printedPages?.length);
+  assert.deepEqual(await page.evaluate(()=>window.printedPages),[first,second,fourth.id]);
+  assert.equal(await saved(root,first),renderHTML(source));
+  assert.equal((await draft(page,first)).objects.find(o=>o.id==='edge').text,'条件导出的浏览器草稿');
+},{extraSection:[third,fourth]});

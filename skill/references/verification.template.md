@@ -23,6 +23,7 @@ Use this reference only when HTML UI, layout, interaction, player behavior, or a
 - When changing marquee selection, start a drag in the editor margin, extend it past the canvas edge, and verify that preview and selection agree. Check cancellation and scrolling at a zoom level that clips the slide.
 - When changing object duplication or clipboard behavior, verify that a copy near the lower-right corner visibly offsets. In a temporary two-page copy, paste from the toolbar and immediately after clicking the destination in the outline. Check that images, groups and internal connectors survive, external endpoints detach, and undo removes the pasted objects.
 - Narrow and wide desktop viewports behave as intended; check mobile layout only when the change affects it.
+- For conditional export, combine a section, individual pages, and a page range. Verify deduplication and outline order. Open the multi-page HTML offline and check page navigation and embedded fonts.
 - Open exported HTML/PDF when the task concerns export fidelity. For mixed formats, check the PDF page count, order, and individual page sizes (e.g. `pdfinfo -f 1 -l <page-count>`). Check fit and a zoom level that requires scrolling; zoom must not change source geometry.
 
 Report verification as separate layers:

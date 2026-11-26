@@ -8,7 +8,7 @@ import {openWorkspace,httpError,revision} from './workspace.mjs';
 import {changeOutline} from './outline.mjs';
 import {updateContext} from './context.mjs';
 import {exportPDF} from './pdf.mjs';
-import {validate,fontAssets,fontFace,renderHTML} from '../workbench/model.mjs';
+import {validate,fontAssets,fontFace,renderHTML,renderDeckHTML} from '../workbench/model.mjs';
 
 const files={'/':['index.html','text/html'], '/style.css':['style.css','text/css'], '/app.mjs':['app.mjs','text/javascript'], '/model.mjs':['model.mjs','text/javascript'], '/selection.mjs':['selection.mjs','text/javascript']};
 for(const [,name,license] of fontAssets){files[`/fonts/${name}`]=[`fonts/${name}`,'font/woff2'];files[`/fonts/${license}`]=[`fonts/${license}`,'text/plain'];}
@@ -44,25 +44,48 @@ export async function makeServer(root=fileURLToPath(new URL('..',import.meta.url
       if (method==='GET' && Object.hasOwn(files,path)) {
         const [name,type]=files[path]; if(type==='font/woff2')res.setHeader('Cache-Control','public, max-age=86400'); return send(200,await readFile(resolve(root,'workbench',name)),type);
       }
-      if(method==='POST'&&path==='/api/html'&&exports){
+      const selected=searchParams.get('scope')==='selected';
+      if(method==='POST'&&path==='/api/html'&&exports&&!selected){
         const model=await json(req), id=model?.id;
         if(!workspace.pages.has(id))throw httpError(404,'页面不存在。');
         try{validate(model,id);}catch(e){throw httpError(400,e.message);}
         const html=renderHTML(model,await embeddedFonts(root,{licenses:true}));
         return send(201,{file:await exports.save(id,'html',html)});
       }
-      if (method==='POST' && path==='/api/pdf') {
-        if(printing)throw httpError(409,'有一份 PDF 正在导出。');
-        printing=true;
+      if(method==='POST'&&(path==='/api/pdf'||(path==='/api/html'&&selected&&exports))) {
+        const pdf=path==='/api/pdf';
+        if(pdf&&printing)throw httpError(409,'有一份 PDF 正在导出。');
+        if(pdf)printing=true;
         try {
-          const models=await json(req,8_000_000), ids=[...workspace.pages.keys()];
-          if(ids.length>120)throw httpError(413,'此演示超过 120 页。');
-          if(!Array.isArray(models)||models.length!==ids.length)throw httpError(400,'PDF 页数不匹配。');
-          try {models.forEach((model,i)=>validate(model,ids[i]));}catch(e){throw httpError(400,e.message);}
-          const pdf=await exportPDF(root,models);
-          if(exports&&searchParams.get('delivery')!=='browser')return send(201,{file:await exports.save('slides','pdf',pdf)});
-          res.writeHead(200,{'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="slides.pdf"'});res.end(pdf);return;
-        } finally {printing=false;}
+          const payload=await json(req,8_000_000);
+          const models=selected?payload?.models:payload;
+          const current=selected?await openWorkspace(workspace.root):workspace;
+          if(selected&&payload?.manifest_revision!==revision(current.manifestText)){
+            throw httpError(409,'大纲已更新，请刷新工作台后重选导出范围。');
+          }
+          const ids=[...current.pages.keys()];
+          if(!selected&&ids.length>120)throw httpError(413,'此演示超过 120 页。');
+          if(!Array.isArray(models)||!models.length||(!selected&&models.length!==ids.length))throw httpError(400,'导出页数不匹配。');
+          if(models.length>120)throw httpError(413,'每次最多导出 120 页。');
+          const positions=new Map(ids.map((id,i)=>[id,i]));
+          let previous=-1;
+          try {
+            models.forEach((model,i)=>{
+              const id=selected?model?.id:ids[i], position=positions.get(id);
+              if(position===undefined||position<=previous)throw new Error('导出页须存在且按大纲顺序排列，每页只允许出现一次。');
+              validate(model,id);previous=position;
+            });
+          }catch(e){throw httpError(400,e.message);}
+          if(!pdf){
+            const assets=await embeddedFonts(root,{licenses:true});
+            const html=renderDeckHTML(models,{title:current.manifest.title,...assets});
+            return send(201,{file:await exports.save('slides-selection','html',html)});
+          }
+          const bytes=await exportPDF(root,models), stem=selected?'slides-selection':'slides';
+          if(exports&&searchParams.get('delivery')!=='browser')return send(201,{file:await exports.save(stem,'pdf',bytes)});
+          res.writeHead(200,{'Content-Type':'application/pdf','Content-Disposition':`attachment; filename="${stem}.pdf"`});
+          res.end(bytes);return;
+        } finally {if(pdf)printing=false;}
       }
       if (method==='GET' && path==='/api/manifest') {
         return send(200,await enqueue(async()=>{workspace=await openWorkspace(workspace.root);return catalog();}));

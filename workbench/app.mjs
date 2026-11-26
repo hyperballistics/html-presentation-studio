@@ -1,4 +1,4 @@
-import {defaultFormat,pageFormats,pageSize,defaults,objectStyle,objectCSS,THEME,fontAssets,fontFace,validate,renderHTML,borderDefaults,styleLimits,sides,arrowCSS,anchorPoint,endpointPoint,arrowGeometry,withoutObjects,pdfPageCSS,selectGroups,regroup,setReveal,revealStep,isHexColor,isSourceURL,rasterImageCSS} from './model.mjs';
+import {defaultFormat,pageFormats,pageSize,defaults,objectStyle,objectCSS,THEME,fontAssets,fontFace,validate,renderHTML,renderDeckHTML,borderDefaults,styleLimits,sides,arrowCSS,anchorPoint,endpointPoint,arrowGeometry,withoutObjects,pdfPageCSS,selectGroups,regroup,setReveal,revealStep,isHexColor,isSourceURL,rasterImageCSS} from './model.mjs';
 import {selectionBounds,rectBetween,boxHits,transformSelection,fitToPage,alignmentUnits,alignSelection} from './selection.mjs';
 const $=id=>document.getElementById(id), all=q=>[...document.querySelectorAll(q)];
 const make=(tag,classes='',text='')=>Object.assign(document.createElement(tag),{className:classes,textContent:text});
@@ -1226,6 +1226,85 @@ function chooseExportDestination(format,filename){
     if(!native)(root.hidden?downloads:root).focus();
   });
 }
+function addPageRanges(ids,range,pages){
+  if(!range.trim())return;
+  for(const item of range.split(/[,，、]/)){
+    const match=/^\s*(\d+)\s*(?:[-–—－]\s*(\d+)\s*)?$/.exec(item);
+    if(!match)throw new Error('页码格式有误，请输入类似 1, 3-5 的范围。');
+    const start=Number(match[1]), end=Number(match[2]??match[1]);
+    if(start<1||end>pages.length||start>end)throw new Error(`页码须在 1–${pages.length} 之间，范围起点不得大于终点。`);
+    for(let n=start;n<=end;n++)ids.add(pages[n-1].id);
+  }
+}
+function chooseExportScope(){
+  const dialog=$('select-export-dialog'), list=$('select-export-pages');
+  const range=$('select-export-range'), format=$('select-export-format');
+  const summary=$('select-export-summary'), next=$('select-export-next');
+  const pages=pageList, manifestRevision=catalog.manifest_revision;
+  const checks=new Map(), groups=[];
+  let pageNumber=0, scope;
+  const checkbox=(parent,classes,text)=>{
+    const label=make('label',classes), input=make('input');input.type='checkbox';
+    label.append(input,make('span','',text));parent.append(label);return input;
+  };
+  list.replaceChildren();range.value='';format.value='pdf';
+  for(const section of catalog.sections){
+    const group=make('fieldset'), legend=make('legend','sr',section.title);
+    group.append(legend);list.append(group);
+    const sectionCheck=checkbox(group,'export-scope-section',`${section.title}（${section.pages.length} 页）`);
+    const pageChecks=section.pages.map(page=>{
+      const input=checkbox(group,'export-scope-page',`${++pageNumber}. ${page.id===model.id?model.title:page.title}`);
+      checks.set(page.id,input);return input;
+    });
+    sectionCheck.disabled=!pageChecks.length;
+    sectionCheck.onchange=()=>{for(const input of pageChecks)input.checked=sectionCheck.checked;};
+    groups.push({sectionCheck,pageChecks});
+  }
+  function refresh(){
+    for(const {sectionCheck,pageChecks} of groups){
+      const count=pageChecks.filter(input=>input.checked).length;
+      sectionCheck.checked=count>0&&count===pageChecks.length;
+      sectionCheck.indeterminate=count>0&&!sectionCheck.checked;
+    }
+    const ids=new Set([...checks].filter(([,input])=>input.checked).map(([id])=>id));
+    const outputFormat=format.value;
+    let message, invalid=false, rangeInvalid=false;
+    scope=null;
+    try{addPageRanges(ids,range.value,pages);}
+    catch(e){message=e.message;invalid=rangeInvalid=true;}
+    if(!invalid){
+      const selected=pages.filter(p=>ids.has(p.id));
+      if(selected.length>120){invalid=true;message='每次最多导出 120 页，请缩小范围。';}
+      else if(!selected.length)message='请选择至少一页。';
+      else {
+        const kind=outputFormat==='pdf'?'一个 PDF':'一个离线 HTML';
+        message=`将按大纲顺序导出 ${selected.length} 页，生成${kind}。`;
+        scope={format:outputFormat,pages:selected,manifestRevision};
+      }
+    }
+    summary.textContent=message;summary.toggleAttribute('data-invalid',invalid);
+    range.setAttribute('aria-invalid',String(rangeInvalid));next.disabled=!scope;
+  }
+  function selectOnly(id){
+    range.value='';for(const [key,input] of checks)input.checked=key===id;refresh();
+  }
+  list.onchange=range.oninput=format.onchange=refresh;
+  $('select-export-current').onclick=()=>selectOnly(model.id);
+  $('select-export-clear').onclick=()=>selectOnly();
+  $('select-export-cancel').onclick=()=>dialog.close();
+  $('select-export-form').onsubmit=e=>{if(!scope)e.preventDefault();};
+  dialog.returnValue='';refresh();
+  return new Promise(resolve=>{
+    dialog.addEventListener('close',()=>{
+      list.onchange=range.oninput=format.onchange=null;
+      $('select-export-current').onclick=$('select-export-clear').onclick=$('select-export-cancel').onclick=null;
+      $('select-export-form').onsubmit=null;
+      list.replaceChildren();
+      resolve(dialog.returnValue==='export'?scope:null);
+    },{once:true});
+    dialog.showModal();
+  });
+}
 async function deliverBlob(blob,filename,destination){
   if(destination.file){
     const writable=await destination.file.createWritable();
@@ -1354,39 +1433,59 @@ const printStyle=make('style');document.head.append(printStyle);
 async function printPDF(pages) {
   printStyle.textContent=`@media print{${pdfPageCSS(pages)}}`;
   printDeck.replaceChildren(...pages.map(page=>{
-    const frame=make('div','pdf-page');frame.dataset.format=pageSize(page.format).format;frame.append(populate(make('div','slide'),false,page));return frame;
+    const frame=make('div','pdf-page'), slide=populate(make('div','slide'),false,page);
+    frame.dataset.format=pageSize(page.format).format;slide.dataset.pageId=page.id;
+    frame.append(slide);return frame;
   }));
   // Force layout so document.fonts.ready includes fonts of the print-only pages.
   document.body.classList.add('printing');void printDeck.offsetHeight;
   await document.fonts.ready;window.print();
 }
 window.addEventListener('afterprint',()=>{document.body.classList.remove('printing');printDeck.replaceChildren();printStyle.textContent='';});
-async function exportDeckPDF(filename,destination){
-  const pages=[];for(const p of pageList)pages.push(await pageSnapshot(p.id));
+async function exportPages(format,pages,filename,destination,manifestRevision){
+  const models=await Promise.all(pages.map(p=>pageSnapshot(p.id)));
   const viaRoot=destination.choice==='root';
-  const res=await fetch(viaRoot?'/api/pdf':'/api/pdf?delivery=browser',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(pages)});
-  if(destination.choice==='download'&&[413,501,503].includes(res.status)){await printPDF(pages);return null;}
+  if(format==='html'&&!viaRoot){
+    const assets=await embedFonts();
+    const html=renderDeckHTML(models,{title:catalog.title,embeddedFaces:assets.map(a=>a.face).join('\n'),licenses:assets.map(a=>a.license).join('\n\n')});
+    return deliverBlob(new Blob([html],{type:'text/html;charset=utf-8'}),filename,destination);
+  }
+  const query=new URLSearchParams({delivery:viaRoot?'root':'browser'});
+  if(manifestRevision)query.set('scope','selected');
+  const body=manifestRevision?{models,manifest_revision:manifestRevision}:models;
+  const res=await fetch(`/api/${format}?${query}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(format==='pdf'&&destination.choice==='download'&&[413,501,503].includes(res.status)){await printPDF(models);return null;}
   if(!res.ok)throw new Error((await res.json()).error);
   if(viaRoot)return (await res.json()).file;
   return deliverBlob(await res.blob(),filename,destination);
 }
-async function requestExport(format,{conflictCopy=false}={}){
+async function requestExport(format,{conflictCopy=false,conditional=false}={}){
   if(busy||choosingExport)return;
   inline?.blur();
-  const snapshot=model, label=format.toUpperCase();
-  const filename=format==='html'?`${snapshot.id}${dirty()?'-draft':''}.html`:
-    `${catalog.title.replace(/[\\/:*?"<>|]/g,'-').slice(0,100)||'slides'}.pdf`;
+  let scope, snapshot, filename, destination;
   choosingExport=true;
-  let destination;
-  try{destination=await chooseExportDestination(format,filename);}
+  try{
+    if(conditional){
+      scope=await chooseExportScope();
+      if(!scope)return;
+      format=scope.format;
+    }
+    if(format==='html'&&(!scope||scope.pages.length===1))snapshot=await pageSnapshot(scope?.pages[0].id??model.id);
+    const stem=catalog.title.replace(/[\\/:*?"<>|]/g,'-').slice(0,100)||'slides';
+    filename=snapshot?`${snapshot.id}${snapshot.id===model.id&&dirty()?'-draft':''}.html`:
+      `${stem}${scope?'-选页':''}.${format}`;
+    destination=await chooseExportDestination(format,filename);
+  }catch(e){banner(e.message,stale);return;}
   finally{choosingExport=false;}
   if(!destination)return;
+  const label=format.toUpperCase();
   busy=true;refreshStatus();
-  const buttons=['export','edit-export-pdf','export-pdf','save-conflict-copy'].map($);
+  const buttons=['export','edit-export-pdf','export-pdf','save-conflict-copy','select-export'].map($);
   for(const button of buttons)button.disabled=true;
   if(player.hidden)status(`正在导出 ${label}…`);else playStatus(`正在导出 ${label}…`,'pdf');
   try{
-    const file=format==='html'?await exportHTML(snapshot,filename,destination):await exportDeckPDF(filename,destination);
+    const file=snapshot?await exportHTML(snapshot,filename,destination):
+      await exportPages(format,scope?.pages??pageList,filename,destination,scope?.manifestRevision);
     if(file)exportLocation(`已保存 ${label}`,file);
     if(!player.hidden)playStatus(file?`已保存 ${label} · ${file}`:'','pdf');
     announce(file?`已保存 ${label}。`:`${label} 导出已提交。`);
@@ -1399,6 +1498,7 @@ async function requestExport(format,{conflictCopy=false}={}){
     for(const button of buttons)button.disabled=false;
   }
 }
+action('select-export',()=>requestExport(null,{conditional:true}));
 action('export',()=>requestExport('html'));
 for(const id of ['edit-export-pdf','export-pdf'])action(id,()=>requestExport('pdf'));
 action('cancel-conflict',()=>{if(!busy)$('conflict-dialog').close();});

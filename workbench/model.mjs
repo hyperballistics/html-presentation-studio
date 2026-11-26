@@ -250,6 +250,33 @@ ${slide}${licenses?`\n<template id="font-licenses">${escape(licenses)}</template
 </body></html>\n`;
 }
 
+// A portable viewing document, independent of the per-page source-file contract.
+export function renderDeckHTML(models,{title,embeddedFaces,licenses}) {
+  const links=models.map((page,i)=>`<a href="#page-${page.id}">${i+1}. ${escape(page.title)}</a>`).join('');
+  const pages=models.map(page=>{
+    const {w,h,format}=pageSize(page.format);
+    return `<div class="sheet pdf-page" id="page-${page.id}" data-format="${format}" tabindex="0" aria-label="${escape(page.title)}" style="--page-width:${w}px;--page-height:${h}px">${renderSlide(page)}</div>`;
+  }).join('\n');
+  return `<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; font-src data:; img-src data:">
+<title>${escape(title)}</title>
+<style>${embeddedFaces}
+html{scroll-padding-top:4rem}body{margin:0;background:${THEME.background};color:${THEME.text};font:14px ${FONTS.sans}}
+nav{position:sticky;top:0;z-index:1;display:flex;gap:.5rem;overflow-x:auto;padding:.6rem;background:${THEME.paper};border-bottom:1px solid ${THEME.line}}
+nav a{flex:none;color:${THEME.accent};border:1px solid ${THEME.line};border-radius:.4rem;padding:.25rem .5rem;text-decoration:none}
+nav a:hover{background:${THEME.card}}:focus-visible{outline:2px solid ${THEME.accent};outline-offset:2px}
+.sheet{width:min(var(--page-width),calc(100% - 1.5rem));margin:1rem auto;overflow:auto}
+.slide{width:var(--page-width);height:var(--page-height);position:relative;overflow:hidden}
+.object{${objectCSS}}${sourceLinkCSS}
+@media print{nav{display:none}.sheet{margin:0}${pdfPageCSS(models)}}
+</style></head><body>
+<nav aria-label="页码导航">${links}</nav>
+<main>${pages}</main>
+<template id="font-licenses">${escape(licenses)}</template>
+</body></html>\n`;
+}
+
 export function readHTML(html, pageId) {
   const match = html.match(/<script type="application\/json" id="slide-model">\n([\s\S]*?)\n<\/script>/);
   req(match, '实体 HTML 缺少 slide-model。');

@@ -278,7 +278,8 @@ test('configured export writes standalone drafts to the selected directory witho
   const origin=`http://127.0.0.1:${server.address().port}`;
   const post=(model,site=origin)=>fetch(`${origin}/api/html`,{method:'POST',headers:{Origin:site,'Content-Type':'application/json'},body:JSON.stringify(model)});
   const absDest=await realpath(dest);
-  assert.equal((await (await fetch(`${origin}/api/manifest`)).json()).export_root,absDest);
+  const catalog=await (await fetch(`${origin}/api/manifest`)).json();
+  assert.equal(catalog.export_root,absDest);
   const draft={...original,transition:'fade',clickReveal:['hero-title'],objects:[{...original.objects[0],text:'未写回的草稿'},rasterObject]};
   assert.equal((await post(draft,'https://elsewhere.invalid')).status,403);
   assert.equal((await post({...draft,clickReveal:['absent']})).status,400);
@@ -295,9 +296,36 @@ test('configured export writes standalone drafts to the selected directory witho
   assert.ok(bytes.includes(`<img src="${pngData}" alt="照片说明 &lt;示例&gt;"`));
   assert.equal(bytes,await readFile(b,'utf8'));
   assert.equal(source,await readFile(join(root,name),'utf8'));
+  const conditional=(payload,path='html')=>fetch(`${origin}/api/${path}?scope=selected&delivery=root`,{
+    method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify(payload),
+  });
+  const second={...original,id:'p02-fixture',title:'第二页'};
+  const secondFile=`${folder}/pages/${second.id}.html`;
+  await writeFile(join(root,secondFile),renderHTML(second));
+  const expanded=structuredClone(manifest);
+  expanded.sections[0].pages.push({id:second.id,title:second.title,file:secondFile});
+  const manifestText=JSON.stringify(expanded);
+  await writeFile(join(root,'deck.manifest.json'),manifestText);
+  const selection={models:[draft,second],manifest_revision:revision(manifestText)};
+  assert.equal((await conditional({...selection,models:[]},'pdf')).status,400);
+  assert.equal((await conditional({...selection,models:[draft,draft]})).status,400);
+  assert.equal((await conditional({...selection,models:[second,draft]})).status,400);
+  assert.equal((await conditional({...selection,models:[{...draft,id:'../escape'}]})).status,400);
+  assert.equal((await conditional({...selection,manifest_revision:catalog.manifest_revision})).status,409);
+  const exported=await conditional(selection);
+  assert.equal(exported.status,201);
+  const delivered=(await exported.json()).file;
+  assert.equal(delivered.startsWith(`${absDest}/slides-selection-`),true);
+  assert.equal(delivered.endsWith('.html'),true);
+  const document=await readFile(delivered,'utf8');
+  assert.deepEqual([...document.matchAll(/data-page-id="([^"]+)"/g)].map(match=>match[1]),[id,second.id]);
+  assert.match(document,/未写回的草稿/);
+  assert.match(document,/data:font\/woff2;base64,/);
+  assert.equal(source,await readFile(join(root,name),'utf8'));
   await rename(dest,`${dest}-old`);
   await mkdir(dest);
   assert.equal((await post(draft)).status,409);
+  assert.equal((await conditional(selection)).status,409);
   assert.deepEqual(await readdir(dest),[]);
 });
 
