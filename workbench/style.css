@@ -195,9 +195,8 @@ body.printing #print-deck{display:block;position:absolute;left:-1000000px;top:0}
 #slide{touch-action:none;-webkit-user-select:none;user-select:none}
 #slide textarea{-webkit-user-select:text;user-select:text}
 .selection.multi{outline:2px solid var(--accent)}
-.selection-item,.marquee{position:absolute;z-index:1;pointer-events:none}
-.selection-item{outline:1px dashed var(--accent);outline-offset:-1px}
-.marquee{z-index:3;border:2px solid var(--accent);background:#065fa91c}
+.selection-item{position:absolute;z-index:1;pointer-events:none;outline:1px dashed var(--accent);outline-offset:-1px}
+.marquee{position:fixed;z-index:100;pointer-events:none;border:2px solid var(--accent);background:#065fa91c}
 .layer-select{display:flex;align-items:center;gap:3px}
 .layer-select .layer-icon,.layer-group-mark{flex:none}
 .section-label,.page-label,.layer-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

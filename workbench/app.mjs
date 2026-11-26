@@ -11,7 +11,7 @@ const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const endpoint=id=>`/api/pages/${id}`;
 let catalog, source, model, storageKey, baseKey, cached, draftBase, storageOK=true, forked=false, stale=false;
 let history=[], future=[], group='', time=0, brush, pointer, inline, editorScale=1, busy=false, reviewAction, sampling;
-let selection=new Set(), fixedZoom=null;
+let selection=new Set(), fixedZoom=null, objectClipboardEntry, clipboardFeedbackTimer;
 const canvasSize=()=>pageSize(model?.format);
 const selectedItems=()=>model.objects.filter(o=>selection.has(o.id));
 const active=()=>selection.size===1?model?.objects.find(o=>selection.has(o.id)):undefined;
@@ -562,7 +562,8 @@ function inspector(skip) {
   toolDisabled('ungroup-selection',!selectedGroups().length);
   $('align-fields').hidden=!multiple;
   $('align-fields').disabled=!multiple||alignmentUnits(model,selection).length<2;
-  toolDisabled('duplicate',!items.length);toolDisabled('delete',!items.length);
+  toolDisabled('duplicate',!items.length);toolDisabled('copy-objects',!items.length);
+  toolDisabled('paste-objects',!objectClipboardEntry);toolDisabled('delete',!items.length);
   const objects=model.objects;
   toolDisabled('raise',!objects.some((item,i)=>selection.has(item.id)&&objects[i+1]&&!selection.has(objects[i+1].id)));
   toolDisabled('lower',!objects.some((item,i)=>selection.has(item.id)&&objects[i-1]&&!selection.has(objects[i-1].id)));
@@ -777,20 +778,42 @@ function portableSelection(){
   const groups=selectedGroups();
   return {objects,...(groups.length?{groups}:{}),...(model.format?{format:model.format}:{})};
 }
-function pasteObjects(payload){
-  if(busy||pointer)return;
-  if(model.objects.length+payload.objects.length>80){banner('一页最多 80 个对象。');return;}
+function clipboardFeedback(message){
+  const status=$('clipboard-status');
+  clearTimeout(clipboardFeedbackTimer);
+  status.textContent=message;
+  clipboardFeedbackTimer=setTimeout(()=>{status.textContent='';},4000);
+}
+function copyObjects(){
+  if(!model||busy||pointer||inline||!selection.size)return;
+  const payload=copy(portableSelection());
+  objectClipboardEntry={payload,page:model.id};
+  toolDisabled('paste-objects',false);
+  clipboardFeedback(`已复制 ${payload.objects.length} 个对象，可切页粘贴。`);
+  return payload;
+}
+function pasteObjects(payload,{duplicate=false,offset=0}={}){
+  if(busy||pointer||inline)return;
+  const count=payload.objects.length, verb=duplicate?'创建副本':'粘贴';
+  if(model.objects.length+count>80){clipboardFeedback(`无法${verb}：一页最多 80 个对象。`);return;}
   const mapping=new Map(payload.objects.map(o=>[o.id,`${o.type}-${crypto.randomUUID()}`]));
   const ids=new Set(mapping.keys());
   const end=p=>p.target?{...p,target:mapping.get(p.target)}:p;
-  const objects=fitToPage(payload.objects,ids,canvasSize(),{offset:18}).map(o=>o.type==='arrow'?
+  const objects=fitToPage(payload.objects,ids,canvasSize(),{offset}).map(o=>o.type==='arrow'?
     {...o,id:mapping.get(o.id),from:end(o.from),to:end(o.to)}:{...o,id:mapping.get(o.id)});
   const groups=[...(model.groups??[]),...(payload.groups??[]).map(g=>g.map(id=>mapping.get(id)))];
   select(mapping.values(),false);
   commit({...model,objects:[...model.objects,...objects],...(groups.length?{groups}:{})});
   $('slide').focus({preventScroll:true});
+  clipboardFeedback(duplicate?`已创建 ${count} 个对象的副本。`:`已粘贴 ${count} 个对象。`);
 }
-action('duplicate',()=>{if(selection.size)pasteObjects(portableSelection());});
+function pasteCopiedObjects(){
+  if(!objectClipboardEntry)return;
+  const {payload,page}=objectClipboardEntry;
+  pasteObjects(payload,{offset:page===model.id?18:0});
+}
+action('duplicate',()=>{if(selection.size)pasteObjects(portableSelection(),{duplicate:true,offset:18});});
+action('copy-objects',copyObjects);action('paste-objects',pasteCopiedObjects);
 action('raise',()=>mutateOrder(1));action('lower',()=>mutateOrder(-1));action('delete',remove);
 action('paint',()=>{const o=active();if(o&&o.type!=='arrow'){brush=Object.fromEntries(formatKeys.map(k=>[k,o[k]]));inspector();announce('已取格式。选择另一个对象后点击刷格式。');}});
 action('apply-paint',()=>{if(brush&&selection.size&&selectedItems().every(o=>o.type!=='arrow'))update(brush);});
@@ -965,17 +988,23 @@ function snapEndpoint(point) {
   return snap?.end||point;
 }
 const deltas={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};
-on('slide','pointerdown',e=>{
-  if(busy||pointer||e.button!==0||!e.isPrimary||inline)return;
+on('stage','pointerdown',e=>{
+  if(!model||busy||pointer||e.button!==0||!e.isPrimary||inline)return;
+  const slide=$('slide'), stage=e.currentTarget;
+  if(!slide.contains(e.target)){
+    if(e.target!==stage||sampling||e.pointerType==='touch')return;
+    const bounds=stage.getBoundingClientRect();
+    if(e.clientX>=bounds.left+stage.clientWidth||e.clientY>=bounds.top+stage.clientHeight)return;
+  }
   if(sampling){const value=sampleColor(e),{prop}=sampling;sampling=null;if(applyColor(prop,value))announce('颜色已应用。');canvasHint();return;}
-  const slide=$('slide'), obj=e.target.closest('[data-edit-id]'), resize=e.target.closest('.resize'), handle=e.target.closest('[data-end]');
+  const obj=e.target.closest('[data-edit-id]'), resize=e.target.closest('.resize'), handle=e.target.closest('[data-end]');
   if(!resize&&!handle){e.preventDefault();slide.focus({preventScroll:true});}
   if(obj&&modifier(e)){selectObject(obj.dataset.editId,true);return;}
   if(obj&&!selection.has(obj.dataset.editId))selectObject(obj.dataset.editId,false);
   const {left,top}=slide.getBoundingClientRect();
   const shared={id:e.pointerId,cx:e.clientX,cy:e.clientY,x:(e.clientX-left)/editorScale,y:(e.clientY-top)/editorScale,started:false};
   if(!obj&&!resize&&!handle){
-    pointer={...shared,mode:'marquee',start:canvasPoint(e),add:modifier(e)};
+    pointer={...shared,mode:'marquee',start:{x:shared.x,y:shared.y},add:modifier(e)};
   }else{
     const end=handle?.dataset.end, o=active(), mode=end?'end':resize?'resize':'move';
     const rect=selectionBounds(model.objects,selection);
@@ -985,14 +1014,28 @@ on('slide','pointerdown',e=>{
   }
   slide.setPointerCapture(e.pointerId);
 });
+function marqueeRects(start,{x,y}){
+  const {left,top}=$('slide').getBoundingClientRect();
+  return {
+    preview:rectBetween({x:left+start.x*editorScale,y:top+start.y*editorScale},{x,y}),
+    selection:rectBetween(start,{x:(x-left)/editorScale,y:(y-top)/editorScale})
+  };
+}
+on('stage','scroll',()=>{
+  if(pointer?.overlay)box(pointer.overlay,marqueeRects(pointer.start,pointer.cursor).preview);
+});
 on('slide','pointermove',e=>{
   const p=pointer;if(p?.id!==e.pointerId)return;
   const {cx,cy,o,mode,end,point,rect}=p, slide=$('slide');
   if(!p.started&&Math.hypot(e.clientX-cx,e.clientY-cy)<3)return;
   p.started=true;
   if(mode==='marquee'){
-    if(!p.overlay){p.overlay=make('div','marquee');p.overlay.setAttribute('aria-hidden','true');slide.append(p.overlay);}
-    p.rect=rectBetween(p.start,canvasPoint(e));box(p.overlay,p.rect);return;
+    if(!p.overlay){
+      p.overlay=make('div','marquee');p.overlay.setAttribute('aria-hidden','true');document.body.append(p.overlay);
+    }
+    p.cursor={x:e.clientX,y:e.clientY};
+    box(p.overlay,marqueeRects(p.start,p.cursor).preview);
+    return;
   }
   const {left,top}=slide.getBoundingClientRect(), {w:width,h:height}=canvasSize();
   const dx=(e.clientX-left)/editorScale-p.x, dy=(e.clientY-top)/editorScale-p.y;
@@ -1025,8 +1068,8 @@ function finishPointer(e,keep){
   if(p.mode==='marquee'){
     p.overlay?.remove();
     if(!keep)return;
-    if(p.started){
-      const hits=boxHits(model.objects,p.rect);
+    if(p.started||Math.hypot(e.clientX-p.cx,e.clientY-p.cy)>=3){
+      const hits=boxHits(model.objects,marqueeRects(p.start,{x:e.clientX,y:e.clientY}).selection);
       select(p.add?[...selection,...hits]:hits);
       announce(`已选中 ${selection.size} 个对象。`);
     }else if(!p.add)select();
@@ -1038,7 +1081,7 @@ function finishPointer(e,keep){
   }else if(p.started)canvas();
   else if(keep&&p.mode==='move'&&p.hit&&selectGroups(model,[p.hit]).size!==selection.size)select([p.hit]);
 }
-on('slide','pointerup',e=>finishPointer(e,true));on('slide','pointercancel',e=>finishPointer(e,false));on('slide','lostpointercapture',e=>finishPointer(e,false));
+on('slide','pointercancel',e=>finishPointer(e,false));on('slide','lostpointercapture',e=>finishPointer(e,false));
 function editInline() {
   const o=active(); if(!o||o.type==='arrow'||inline||busy||sampling)return;
   const el=make('textarea','inline-editor'); el.value=o.text; el.maxLength=2000;el.setAttribute('aria-label',`编辑对象 ${o.id} 的文本`);
@@ -1051,7 +1094,9 @@ on('slide','dblclick',e=>{if(e.target.closest('[data-edit-id]')) editInline();})
 // A stable canvas listener also handles double taps whose DOM targets were replaced by selection.
 let lastTap;
 on('slide','pointerup',e=>{
-  if(e.pointerType!=='mouse'||!active()){lastTap=null;return;}
+  const marquee=pointer?.id===e.pointerId&&pointer.mode==='marquee';
+  finishPointer(e,true);
+  if(marquee||e.pointerType!=='mouse'||!active()){lastTap=null;return;}
   const hit=document.elementFromPoint(e.clientX,e.clientY)?.closest('[data-edit-id]');
   if(!hit||hit.dataset.editId!==active()?.id){lastTap=null;return;}
   if(lastTap?.id===active()?.id&&performance.now()-lastTap.time<420&&Math.hypot(lastTap.x-e.clientX,lastTap.y-e.clientY)<5){lastTap=null;editInline();}
@@ -1059,13 +1104,16 @@ on('slide','pointerup',e=>{
 });
 const textControl=el=>el instanceof Element&&(el.isContentEditable||el.matches('input,textarea,select'));
 const objectFocus=el=>el===document.body||$('slide').contains(el)||layerList.contains(el)||$('ribbon').contains(el);
-const canEditObjects=e=>model&&!busy&&!inline&&!pointer&&!layerDrag&&!sampling&&$('player').hidden&&
-  !e.defaultPrevented&&!document.querySelector('dialog[open]')&&!textControl(e.target)&&
-  objectFocus(e.target)&&window.getSelection()?.isCollapsed;
+const canUseObjectActions=e=>model&&!busy&&!inline&&!pointer&&!layerDrag&&!pageDrag&&!sampling&&$('player').hidden&&
+  !e.defaultPrevented&&!document.querySelector('dialog[open]')&&!textControl(e.target)&&window.getSelection()?.isCollapsed;
+const canEditObjects=e=>canUseObjectActions(e)&&objectFocus(e.target);
+// A click on the outline or page controls can retain focus after the destination page loads.
+const canUseObjectClipboard=e=>canUseObjectActions(e)&&(objectFocus(e.target)||
+  (e.target instanceof Element&&e.target.matches('[data-page],#edit-prev-page,#edit-next-page')));
 const objectClipboard='application/x-html-studio-object-v1', selectionClipboard='application/x-html-studio-selection-v2';
 document.addEventListener('copy',e=>{
-  if(!canEditObjects(e)||!selection.size||!e.clipboardData)return;
-  const payload=portableSelection();
+  if(!canUseObjectClipboard(e)||!e.clipboardData)return;
+  const payload=copyObjects();if(!payload)return;
   e.clipboardData.setData(selectionClipboard,JSON.stringify(payload));
   if(payload.objects.length===1)e.clipboardData.setData(objectClipboard,JSON.stringify(payload.objects[0]));
   const text=payload.objects.map(o=>o.text).filter(Boolean).join('\n');
@@ -1073,12 +1121,18 @@ document.addEventListener('copy',e=>{
   e.preventDefault();
 });
 document.addEventListener('paste',e=>{
-  if(!canEditObjects(e)||!e.clipboardData)return;
-  const raw=e.clipboardData.getData(selectionClipboard), legacy=e.clipboardData.getData(objectClipboard);
-  if((!raw&&!legacy)||(raw||legacy).length>320_000)return;
+  if(!canUseObjectClipboard(e))return;
+  const selectionData=e.clipboardData?.getData(selectionClipboard);
+  const raw=selectionData||e.clipboardData?.getData(objectClipboard);
+  if(!raw){
+    if(objectClipboardEntry){e.preventDefault();pasteCopiedObjects();}
+    return;
+  }
+  if(raw.length>21_000_000)return; // Up to 80 bounded raster objects plus their model fields.
   let payload;
   try{
-    payload=raw?JSON.parse(raw):{objects:[JSON.parse(legacy)]};
+    const data=JSON.parse(raw);
+    payload=selectionData?data:{objects:[data]};
     validate({id:model.id,title:model.title,background:model.background,notes:'',...payload},model.id);
     if(!payload.objects.length)return;
   }catch{return;}
@@ -1096,6 +1150,11 @@ document.addEventListener('keydown',e=>{
   if(editing)return;
   if((e.metaKey||e.ctrlKey)&&['z','y'].includes(e.key.toLowerCase())){e.preventDefault(); if(e.shiftKey||e.key.toLowerCase()==='y')timeTravel(future,history);else timeTravel(history,future);return;}
   if(e.key==='Escape'){select();return;}
+  // App clipboard paste also works with an empty or inaccessible system clipboard.
+  if(!e.altKey&&!e.shiftKey&&(e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='v'&&
+    objectClipboardEntry&&canUseObjectClipboard(e)){
+    e.preventDefault();pasteCopiedObjects();return;
+  }
   if(!canEditObjects(e)||e.altKey)return;
   if(e.metaKey||e.ctrlKey){
     if(e.key.toLowerCase()==='a'){e.preventDefault();select(model.objects.map(o=>o.id));}

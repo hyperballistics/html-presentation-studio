@@ -76,6 +76,8 @@ test('fit content and copied groups to a smaller format without losing links or 
   const pasted=fitToPage(base,ids,target,{offset:18});
   validate({...original,format,objects:pasted});
   validate({...original,format,objects:transformSelection(pasted,ids,{dx:800,dy:800},undefined,target)});
+  const edge=fitToPage([base[2]],new Set(['tiny']),pageSize(),{offset:18});
+  assert.deepEqual({x:edge[0].x,y:edge[0].y},{x:1238,y:678});
 });
 
 test('proposal is scoped and typed',()=>{

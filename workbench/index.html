@@ -46,7 +46,10 @@
     </div>
     <div class="tool-group" role="group" aria-label="对象操作">
       <span class="tool-separator" role="separator" aria-orientation="vertical"></span>
-      <button type="button" id="duplicate">复制对象</button><button type="button" id="raise" class="compact-tool" title="上移一层" aria-label="上移一层"><svg class="ui-icon" aria-hidden="true"><use href="#icon-forward"/></svg><span>上移一层</span></button><button type="button" id="lower" class="compact-tool" title="下移一层" aria-label="下移一层"><svg class="ui-icon" aria-hidden="true"><use href="#icon-backward"/></svg><span>下移一层</span></button><button type="button" id="delete" aria-keyshortcuts="Backspace Delete">删除</button>
+      <button type="button" id="duplicate" title="在当前页创建副本">创建副本</button>
+      <button type="button" id="copy-objects" title="复制对象 (Ctrl/⌘+C)" aria-keyshortcuts="Control+C Meta+C" aria-disabled="true">复制对象</button>
+      <button type="button" id="paste-objects" title="粘贴对象 (Ctrl/⌘+V)" aria-keyshortcuts="Control+V Meta+V" aria-disabled="true">粘贴对象</button>
+      <button type="button" id="raise" class="compact-tool" title="上移一层" aria-label="上移一层"><svg class="ui-icon" aria-hidden="true"><use href="#icon-forward"/></svg><span>上移一层</span></button><button type="button" id="lower" class="compact-tool" title="下移一层" aria-label="下移一层"><svg class="ui-icon" aria-hidden="true"><use href="#icon-backward"/></svg><span>下移一层</span></button><button type="button" id="delete" aria-keyshortcuts="Backspace Delete">删除</button>
     </div>
     <div class="tool-group" role="group" aria-label="组合">
       <span class="tool-separator" role="separator" aria-orientation="vertical"></span>
@@ -153,7 +156,7 @@
     </div>
   </aside>
 </main>
-<footer class="statusbar"><section class="footer-paths" aria-label="文件位置"><code id="file-path"></code><p id="export-location" role="status" hidden><span id="export-label">导出根目录</span> · <code id="export-path"></code></p></section><div><span id="overflow"></span> <span id="studio-version"></span></div></footer>
+<footer class="statusbar"><section class="footer-paths" aria-label="文件位置"><code id="file-path"></code><p id="export-location" role="status" hidden><span id="export-label">导出根目录</span> · <code id="export-path"></code></p></section><div><span id="clipboard-status" role="status"></span> <span id="overflow"></span> <span id="studio-version"></span></div></footer>
 <dialog id="outline-dialog" aria-labelledby="outline-title" aria-describedby="outline-details">
   <h2 id="outline-title"></h2>
   <form id="outline-form">

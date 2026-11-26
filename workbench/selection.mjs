@@ -76,7 +76,8 @@ export function transformSelection(objects,ids,{dx=0,dy=0,ratio=1}={},frame=sele
 export function fitToPage(objects,ids,size,{frame=selectionBounds(objects,ids),offset=0}={}){
   if(!frame)return objects;
   const {w,h}=size, s=Math.min(1,frame.w?w/frame.w:1,frame.h?h/frame.h:1);
-  return mapSelection(objects,ids,frame,size,s,int(frame.x+offset,0,w-Math.round(frame.w*s)),int(frame.y+offset,0,h-Math.round(frame.h*s)));
+  const origin=(start,max)=>int(start+(offset>0&&start===max?-offset:offset),0,max);
+  return mapSelection(objects,ids,frame,size,s,origin(frame.x,w-Math.round(frame.w*s)),origin(frame.y,h-Math.round(frame.h*s)));
 }
 function mapSelection(objects,ids,frame,{w:width,h:height},s,x,y){
   if(s===1&&x===frame.x&&y===frame.y)return objects;
