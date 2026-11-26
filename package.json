@@ -15,7 +15,8 @@
     "agent": "node tools/agent.mjs",
     "history": "node tools/version.mjs",
     "context": "node tools/context-cli.mjs",
-    "export": "node tools/export.mjs"
+    "export": "node tools/export.mjs",
+    "test:browser": "node --test tools/browser.test.mjs"
   },
   "files": [
     ".gitignore",
@@ -31,5 +32,8 @@
     "templates",
     "tools",
     "workbench"
-  ]
+  ],
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
 }

@@ -12,6 +12,7 @@
 |---|---|
 | [`README.md`](README.md) | 索引本地服务、命令行工具和测试。 |
 | [`agent.mjs`](agent.mjs) | 签发单对象编辑请求，审阅或按明确选项应用 Agent 提案。 |
+| [`browser.test.mjs`](browser.test.mjs) | 在临时双页工作区对复制、框选、写回与冲突恢复做 Chromium 回归测试。 |
 | [`check.mjs`](check.mjs) | 校验清单、叙事索引、页面模型、静态投影和字体文件。 |
 | [`context-cli.mjs`](context-cli.mjs) | 提供索引检查、同步和逐页叙事复核命令。 |
 | [`context.mjs`](context.mjs) | 从已写回源及叙事文档生成页面事实索引，比较逐页复核指纹。 |
@@ -30,4 +31,4 @@
 
 ## 维护边界
 
-修改工具后运行 `npm run check` 和 `npm test`，保留版本校验和备份契约。
+修改工具后运行 `npm run check` 和 `npm test`，保留版本校验和备份契约。复制、框选或写回流程变更时，另跑 [浏览器回归](../README.md#可选运行浏览器回归开发者)。

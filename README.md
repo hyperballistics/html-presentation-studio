@@ -11,7 +11,7 @@
 
   如果提示找不到命令，先确认 Node.js 和 npm 已安装并在终端的 `PATH` 中；如果 Node.js 版本低于 22，先升级或切换版本。
 - **必需：一个可打开本机网页的浏览器。** 用它打开工作台即可编辑、播放审阅和导出 HTML；它不必是下文用于 PDF 直出的浏览器。
-- **不用安装项目依赖。** 没有第三方 npm 运行时依赖，不用执行 `npm install`。字体随包提供，不用装到系统里。单独使用工作台不需要 Agent 客户端、Skill、MCP 或 API Key。
+- **不用安装项目依赖。** 没有第三方 npm 运行时依赖，启动工作台不用执行 `npm install`。字体随包提供，不用装到系统里。单独使用工作台不需要 Agent 客户端、Skill、MCP 或 API Key。
 
 ### 首次启动
 
@@ -20,6 +20,18 @@
 3. 保持终端运行，用浏览器打开终端显示的地址（默认 `http://127.0.0.1:4377`）。不要双击打开 `workbench/index.html` 来启动编辑器。若 4377 被占用，可改用 `npm start -- --port 4378`，再打开新地址。服务只监听本机，不对局域网或公网开放。
 
 如果要写回源文件或同步上下文，请把项目放在当前用户可写的目录。开发者可另用 `npm test` 跑自动化测试；它不是启动前置步骤。
+
+### 可选：运行浏览器回归（开发者）
+
+从源码仓库根目录运行：
+
+```sh
+npm ci
+npx playwright install chromium
+npm run test:browser
+```
+
+Playwright 只用于开发测试，不是工作台的运行依赖。测试在临时双页工作区和随机本机端口运行，不访问现有工作台或用户草稿；覆盖同页副本、跨页粘贴、越界框选、审批写回及冲突恢复。失败时可用 `npx playwright show-trace output/browser-tests/<用例>/trace-1.zip` 查看轨迹；启动浏览器失败时还不会生成轨迹。若已安装 Chromium 系浏览器，也可将其可执行文件的绝对路径设为环境变量 `STUDIO_TEST_CHROMIUM`，再运行 `npm run test:browser`。
 
 ### 可选：配置 PDF 直出
 
@@ -60,6 +72,7 @@
 | [`README.md`](README.md) | 介绍如何运行、编辑、导出和复用工作区，并提供仓库导航。 |
 | [`STORYLINE.md`](STORYLINE.md) | 按页记录当前演示的内容、作用及前后承接。 |
 | [`deck.manifest.json`](deck.manifest.json) | 登记当前演示的分节、页序、页面 ID 和实体路径。 |
+| [`package-lock.json`](package-lock.json) | 锁定可选浏览器回归测试的开发依赖。 |
 | [`package.json`](package.json) | 定义 Node.js 版本要求、命令入口和发行包文件范围。 |
 
 ## 许可证

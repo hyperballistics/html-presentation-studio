@@ -1,0 +1,216 @@
+import assert from 'node:assert/strict';
+import {test, before, after} from 'node:test';
+import {cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join, resolve} from 'node:path';
+import {once} from 'node:events';
+import {chromium} from 'playwright';
+import {makeServer} from './serve.mjs';
+import {defaults, pageSize, readHTML, renderHTML, THEME} from '../workbench/model.mjs';
+
+const first='p01-browser', second='p02-browser', section='01-browser';
+const folder=`sections/${section}`, pageFile=id=>`${folder}/pages/${id}.html`;
+const image='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZi8AAAAASUVORK5CYII=';
+const box=(id,x,y,w,h,extra={})=>({...defaults,id,type:'rect',x,y,w,h,...extra});
+const source={id:first,title:'浏览器回归源页',background:THEME.paper,notes:'',objects:[
+  box('picture',180,160,140,100,{text:'示例图片',image}),
+  box('label',410,320,160,60,{text:'组合文字'}),
+  box('edge',1130,610,150,110,{text:'贴边对象'}),
+  {id:'connector',type:'arrow',stroke:THEME.accent,strokeWidth:3,from:{target:'picture',side:'right'},to:{target:'edge',side:'left'}},
+],groups:[['picture','label','connector']]};
+const target={id:second,title:'浏览器回归目标页',background:THEME.paper,notes:'',format:'a6',objects:[]};
+const pages=[source,target];
+let browser;
+before(async()=>{browser=await chromium.launch({executablePath:process.env.STUDIO_TEST_CHROMIUM||undefined});});
+after(async()=>{await browser?.close();});
+
+function regression(name,run){
+  test(name,{timeout:60_000},async()=>{
+    const root=await mkdtemp(join(tmpdir(),'html-studio-browser-'));
+    const contexts=[], errors=[];
+    let server;
+    try{
+      await mkdir(join(root,folder,'pages'),{recursive:true});
+      await cp(new URL('../workbench/',import.meta.url),join(root,'workbench'),{recursive:true});
+      await writeFile(join(root,folder,'section.md'),'# 回归测试\n');
+      await writeFile(join(root,'deck.manifest.json'),JSON.stringify({version:1,title:'Browser regression',sections:[{
+        id:section,title:'回归测试',context:`${folder}/section.md`,pages:pages.map(({id,title})=>({id,title,file:pageFile(id)})),
+      }]}));
+      await writeFile(join(root,'STORYLINE.md'),'# 回归测试\n\n| Page | Content | Role |\n|---|---|---|\n'+
+        pages.map(({id,title})=>`| \`${id}\` | ${title} | 测试 |`).join('\n')+'\n');
+      for(const model of pages)await writeFile(join(root,pageFile(model.id)),renderHTML(model));
+      server=await makeServer(root);server.listen(0,'127.0.0.1');await once(server,'listening');
+      const open=async()=>{
+        const context=await browser.newContext({viewport:{width:1440,height:900},acceptDownloads:true});
+        contexts.push(context);context.setDefaultTimeout(6000);
+        await context.tracing.start({screenshots:true,snapshots:true});
+        const page=await context.newPage();
+        page.on('pageerror',e=>errors.push(e.message));
+        await page.goto(`http://127.0.0.1:${server.address().port}`);
+        await page.locator(`[data-page="${first}"][aria-current="page"]`).waitFor();
+        await page.locator('#save-status').getByText('与源文件一致').waitFor();
+        await page.evaluate(()=>document.fonts.ready.then(()=>true));
+        return page;
+      };
+      await run({root,open});
+      assert.deepEqual(errors,[]);
+    }catch(e){
+      const artifacts=resolve('output','browser-tests',name);
+      try{
+        await mkdir(artifacts,{recursive:true});
+        for(const [i,context] of contexts.entries()){
+          await context.tracing.stop({path:join(artifacts,`trace-${i+1}.zip`)});
+        }
+        console.error(`Browser failure traces: ${artifacts}`);
+      }catch(traceError){console.error(`Could not save browser traces: ${traceError.message}`);}
+      throw e;
+    }finally{
+      try{await Promise.all(contexts.map(c=>c.close()));}
+      finally{
+        if(server?.listening)await new Promise(resolve=>server.close(resolve));
+        await rm(root,{recursive:true,force:true});
+      }
+    }
+  });
+}
+const el=(page,id)=>page.locator(`#${id}`);
+const layer=(page,id)=>page.locator(`#layers [data-layer="${id}"]`);
+const layers=page=>page.locator('#layers [data-layer]');
+const selected=page=>page.locator('#layers [aria-pressed="true"]');
+const waitStatus=(page,text)=>el(page,'save-status').getByText(text,{exact:true}).waitFor();
+const draft=(page,id)=>page.evaluate(id=>Object.entries(localStorage)
+  .filter(([key])=>key.startsWith('html-studio:v1:')&&key.endsWith(`:${id}`))
+  .map(([,value])=>JSON.parse(value).model)[0],id);
+const saved=(root,id)=>readFile(join(root,pageFile(id)),'utf8');
+async function go(page,id){
+  await page.locator(`[data-page="${id}"]`).click();
+  await page.locator(`[data-page="${id}"][aria-current="page"]`).waitFor();
+}
+async function drag(page,from,to){
+  await page.mouse.move(...from);await page.mouse.down();await page.mouse.move(...to,{steps:8});
+}
+
+regression('copy-and-paste',async({root,open})=>{
+  const page=await open();
+  await layer(page,'edge').click();await el(page,'duplicate').click();
+  const copy=(await draft(page,first)).objects.at(-1);
+  assert.notEqual(copy.id,'edge');assert.deepEqual([copy.x,copy.y],[1112,592]);
+  await el(page,'undo').click();assert.equal(await layers(page).count(),source.objects.length);
+
+  await layer(page,'edge').click();await el(page,'copy-objects').click();
+  await go(page,second);
+  assert.equal(await page.evaluate(()=>document.activeElement?.dataset.page),second);
+  await page.keyboard.press('ControlOrMeta+v');
+  assert.equal((await draft(page,second)).objects[0].text,'贴边对象');
+  await el(page,'undo').click();assert.equal(await layers(page).count(),0);
+
+  await go(page,first);await layer(page,'picture').click();
+  await page.keyboard.press('ControlOrMeta+c');
+  await el(page,'clipboard-status').getByText('已复制 3 个对象，可切页粘贴。').waitFor();
+  await go(page,second);await el(page,'paste-objects').click();
+  const pasted=await draft(page,second);
+  const [picture,label,connector]=pasted.objects;
+  assert.equal(pasted.objects.length,3);
+  assert.equal(picture.image,image);assert.equal(label.text,'组合文字');
+  assert.deepEqual(pasted.groups,[[picture.id,label.id,connector.id]]);
+  assert.deepEqual(connector.from,{target:picture.id,side:'right'});
+  assert.deepEqual(Object.keys(connector.to).sort(),['x','y']);
+  assert.ok(pasted.objects.every(o=>!source.objects.some(old=>old.id===o.id)));
+  assert.ok(picture.x+picture.w<=pageSize('a6').w);
+  assert.deepEqual(readHTML(await saved(root,first),first),source);
+  assert.deepEqual(readHTML(await saved(root,second),second),target);
+  await el(page,'undo').click();assert.equal(await layers(page).count(),0);
+});
+
+regression('marquee',async({open})=>{
+  const page=await open(), slide=el(page,'slide'), stage=el(page,'stage');
+  const r=await slide.boundingBox(), s=await stage.boundingBox();
+  const overlay=page.locator('body > .marquee');
+  const start=[r.x-8,r.y-8], outside=[s.x+s.width+12,r.y+r.height+8];
+  await drag(page,start,outside);
+  const visible=await overlay.boundingBox();
+  assert.ok(visible.x<r.x&&visible.x+visible.width>s.x+s.width&&visible.y+visible.height>r.y+r.height);
+  await page.mouse.up();assert.equal(await selected(page).count(),source.objects.length);
+  assert.equal(await overlay.count(),0);
+  await page.mouse.click(...start);assert.equal(await selected(page).count(),0);
+  await drag(page,[r.x+r.width+8,r.y+r.height+8],start);
+  await page.mouse.up();assert.equal(await selected(page).count(),source.objects.length);
+
+  await layer(page,'edge').click();
+  const point=(x,y)=>[r.x+x*r.width/1280,r.y+y*r.height/720];
+  await page.keyboard.down('Shift');
+  await drag(page,point(160,140),point(345,280));await page.mouse.up();
+  await page.keyboard.up('Shift');assert.equal(await selected(page).count(),source.objects.length);
+  await layer(page,'edge').click();
+  await drag(page,start,outside);await page.keyboard.press('Escape');await page.mouse.up();
+  assert.equal(await overlay.count(),0);assert.equal(await selected(page).count(),1);
+
+  await el(page,'zoom').click();await el(page,'zoom-in').click();await el(page,'zoom-in').click();
+  await stage.evaluate(el=>el.scrollTo(0,0));
+  const z=await slide.boundingBox();
+  await drag(page,[z.x-5,z.y-5],[s.x+s.width-28,s.y+s.height-28]);
+  const before=await overlay.boundingBox();
+  await page.mouse.wheel(5000,5000);
+  await page.waitForFunction(x=>{
+    const stage=document.querySelector('#stage');
+    return stage.scrollLeft>50&&stage.scrollTop>0&&document.querySelector('.marquee').getBoundingClientRect().left<x-50;
+  },before.x);
+  await page.mouse.up();assert.equal(await selected(page).count(),source.objects.length);
+});
+
+async function notes(page,text){
+  const field=el(page,'notes');
+  if(!await field.isVisible())await page.locator('.notes summary').click();
+  await field.fill(text);await field.press('Tab');await waitStatus(page,'草稿已自动保存');
+}
+async function review(page){
+  await el(page,'save').click();await page.locator('#review-dialog[open]').waitFor();
+}
+async function approve(page,status){
+  const response=page.waitForResponse(r=>r.request().method()==='PUT'&&r.url().endsWith(`/api/pages/${first}`));
+  await el(page,'approve').click();assert.equal((await response).status(),status);
+}
+
+regression('writeback-and-backup',async({root,open})=>{
+  const page=await open(), original=await saved(root,first);
+  await notes(page,'待写回的说明');await page.reload();await waitStatus(page,'草稿已自动保存');
+  assert.equal(await el(page,'notes').inputValue(),'待写回的说明');
+  await review(page);
+  assert.match(await el(page,'diff').textContent(),/待写回的说明/);
+  await el(page,'cancel-review').click();
+  assert.equal(await saved(root,first),original);assert.ok(await draft(page,first));
+  await review(page);await approve(page,200);await waitStatus(page,'与源文件一致');
+  assert.equal(await draft(page,first),undefined);
+  assert.equal(readHTML(await saved(root,first),first).notes,'待写回的说明');
+  const history=join(root,'.runtime','history');
+  const names=await readdir(history);assert.equal(names.length,1);
+  assert.equal(await readFile(join(history,names[0]),'utf8'),original);
+  assert.match(await readFile(join(root,'.runtime','context','PAGE-FACTS.md'),'utf8'),new RegExp(first));
+});
+
+regression('writeback-conflict',async({root,open})=>{
+  const page=await open(), other=await open();
+  await notes(page,'应该保留的旧草稿');await review(page);
+  await notes(other,'获准写回的新版本');await review(other);await approve(other,200);
+  await waitStatus(other,'与源文件一致');const current=await saved(root,first);
+  await approve(page,412);await waitStatus(page,'版本冲突 · 草稿保留');
+  assert.equal(await el(page,'approve').isDisabled(),true);
+  await el(page,'cancel-review').click();
+  await page.getByRole('button',{name:'处理版本冲突'}).click();
+  await el(page,'save-conflict-copy').click();
+  const download=page.waitForEvent('download');
+  await el(page,'choose-export-download').click();
+  const exported=await download;
+  assert.equal(exported.suggestedFilename(),`${first}-draft.html`);
+  assert.match(await readFile(await exported.path(),'utf8'),/应该保留的旧草稿/);
+  await el(page,'conflict-status').getByText(/当前草稿仍保留/).waitFor();
+  assert.equal((await draft(page,first)).notes,'应该保留的旧草稿');
+  assert.equal(await saved(root,first),current);
+  await el(page,'discard-conflict').click();await el(page,'cancel-discard').click();
+  assert.ok(await draft(page,first));
+  await el(page,'discard-conflict').click();await el(page,'confirm-discard').click();
+  await waitStatus(page,'与源文件一致');
+  assert.equal(await el(page,'notes').inputValue(),'获准写回的新版本');
+  assert.equal(await draft(page,first),undefined);
+  assert.equal(await saved(root,first),current);
+});
