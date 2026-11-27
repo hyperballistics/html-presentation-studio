@@ -67,7 +67,7 @@ function isRasterImage(value) {
   return m[1]==='png'?m[2].startsWith('iVBORw0KGgo'):m[2].startsWith('/9j/');
 }
 const propKeys = o => o.type==='arrow'?arrowFields:[...boxFields,...Object.keys(borderDefaults)];
-const modelKeys = o => [...propKeys(o),...(o.type==='text'?['href','textColors']:o.type==='rect'?['image']:[])];
+const modelKeys = o => [...propKeys(o),...(o.type==='text'?['href','textColors','textWeights']:o.type==='rect'?['image']:[])];
 const idPattern = /^[a-z][a-z0-9-]{0,59}$/;
 export const isHexColor = v => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v);
 const plain = v => v !== null && typeof v === 'object' && Object.getPrototypeOf(v) === Object.prototype;
@@ -81,52 +81,60 @@ function textBoundary(value,index) {
     !(value.charCodeAt(index-1)>=0xd800&&value.charCodeAt(index-1)<=0xdbff&&
       value.charCodeAt(index)>=0xdc00&&value.charCodeAt(index)<=0xdfff);
 }
-function textColorMap(object) {
-  const colors=Array(object.text.length).fill(null);
-  for(const {start,end,color} of object.textColors??[])colors.fill(color,start,end);
-  return colors;
+const textRangeFields={textColors:'color',textWeights:'bold'};
+function textRangeMap(object,key) {
+  const values=Array(object.text.length).fill(null);
+  for(const range of object[key]??[])values.fill(range[textRangeFields[key]],range.start,range.end);
+  return values;
 }
-function withTextColors(object,colors) {
-  const textColors=[];
-  for(let start=0;start<colors.length;){
-    const color=colors[start];
+function withTextRanges(object,key,values) {
+  const ranges=[];
+  for(let start=0;start<values.length;){
+    const value=values[start];
     let end=start+1;
-    while(end<colors.length&&colors[end]===color)end++;
-    if(color)textColors.push({start,end,color});
+    while(end<values.length&&values[end]===value)end++;
+    if(value!==null)ranges.push({start,end,[textRangeFields[key]]:value});
     start=end;
   }
-  if(textColors.length)object.textColors=textColors;
-  else delete object.textColors;
+  if(ranges.length)object[key]=ranges;
+  else delete object[key];
   return object;
 }
-export function setTextColor(object,start,end,color=null) {
+function setTextRange(object,key,start,end,value) {
   if(object.type!=='text'||start>=end||!textBoundary(object.text,start)||!textBoundary(object.text,end))return object;
-  return withTextColors({...object},textColorMap(object).fill(color?.toLowerCase()??null,start,end));
+  return withTextRanges({...object},key,textRangeMap(object,key).fill(value,start,end));
+}
+export function setTextColor(object,start,end,color=null) {
+  return setTextRange(object,'textColors',start,end,color?.toLowerCase()??null);
+}
+export function textRangeIsBold(object,start,end) {
+  return start<end&&textRangeMap(object,'textWeights').slice(start,end).every(bold=>bold??object.bold);
+}
+export function setTextBold(object,start,end,bold) {
+  return setTextRange(object,'textWeights',start,end,bold===object.bold?null:bold);
 }
 export function replaceObjectText(object,value) {
-  if(!object.textColors||typeof value!=='string'||value===object.text)return {...object,text:value};
-  const previous=object.text, colors=textColorMap(object);
+  const next={...object,text:value};
+  if((!object.textColors&&!object.textWeights)||typeof value!=='string'||value===object.text)return next;
+  const previous=object.text;
   let start=0, oldEnd=previous.length, newEnd=value.length;
   while(start<oldEnd&&start<newEnd&&previous[start]===value[start])start++;
   while(!textBoundary(previous,start)||!textBoundary(value,start))start--;
   while(oldEnd>start&&newEnd>start&&previous[oldEnd-1]===value[newEnd-1]){oldEnd--;newEnd--;}
   while(!textBoundary(previous,oldEnd)||!textBoundary(value,newEnd)){oldEnd++;newEnd++;}
-  const insideRun=start>0&&oldEnd<colors.length&&colors[start]&&
-    colors.slice(start-1,oldEnd+1).every(color=>color===colors[start]);
-  return withTextColors({...object,text:value},[
-    ...colors.slice(0,start),...Array(newEnd-start).fill(insideRun?colors[start]:null),...colors.slice(oldEnd),
-  ]);
-}
-export function textColorSegments(object) {
-  const segments=[];
-  let offset=0;
-  for(const {start,end,color} of object.textColors??[]){
-    if(start>offset)segments.push({text:object.text.slice(offset,start)});
-    segments.push({text:object.text.slice(start,end),color});
-    offset=end;
+  for(const key of Object.keys(textRangeFields))if(object[key]){
+    const values=textRangeMap(object,key);
+    const insideRun=start>0&&oldEnd<values.length&&values.slice(start-1,oldEnd+1).every(value=>value===values[start]);
+    withTextRanges(next,key,[...values.slice(0,start),...Array(newEnd-start).fill(insideRun?values[start]:null),...values.slice(oldEnd)]);
   }
-  if(offset<object.text.length)segments.push({text:object.text.slice(offset)});
-  return segments;
+  return next;
+}
+export function textStyleSegments(object) {
+  const colors=textRangeMap(object,'textColors'), weights=textRangeMap(object,'textWeights');
+  const boundaries=new Set([0,object.text.length]);
+  for(const key of Object.keys(textRangeFields))for(const {start,end} of object[key]??[]){boundaries.add(start);boundaries.add(end);}
+  const offsets=[...boundaries].sort((a,b)=>a-b);
+  return offsets.slice(0,-1).map((start,i)=>({text:object.text.slice(start,offsets[i+1]),color:colors[start],bold:weights[start]}));
 }
 
 export const transitions = Object.freeze(['fade','slide','zoom']);
@@ -200,14 +208,14 @@ export function validate(model, pageId = model?.id) {
     }
     const keys=Object.keys(o), allowed=['id','type',...modelKeys(o)];
     req(keys.every(k=>allowed.includes(k)) && boxFields.every(k=>Object.hasOwn(o,k)) && text(o.text,2000), `${o.id} 的字段或文字无效。`);
-    if(Object.hasOwn(o,'textColors')){
+    for(const [key,field] of Object.entries(textRangeFields))if(Object.hasOwn(o,key)){
       let previousEnd=0;
-      req(Array.isArray(o.textColors)&&o.textColors.length>0&&o.textColors.length<=o.text.length&&o.textColors.every(range=>{
-        if(!exact(range,['start','end','color'])||!textBoundary(o.text,range.start)||!textBoundary(o.text,range.end)||
-          range.start<previousEnd||range.start>=range.end||!isHexColor(range.color))return false;
+      req(Array.isArray(o[key])&&o[key].length>0&&o[key].length<=o.text.length&&o[key].every(range=>{
+        if(!exact(range,['start','end',field])||!textBoundary(o.text,range.start)||!textBoundary(o.text,range.end)||
+          range.start<previousEnd||range.start>=range.end||!(field==='color'?isHexColor(range.color):typeof range.bold==='boolean'))return false;
         previousEnd=range.end;
         return true;
-      }),`${o.id} 的局部文字颜色无效。`);
+      }),`${o.id} 的局部文字${field==='color'?'颜色':'字重'}无效。`);
     }
     req(!Object.hasOwn(o,'href')||o.href===''||(isSourceURL(o.href)&&o.text.trim().length>0), `${o.id} 的来源链接须使用有效 HTTPS 地址和可见文字。`);
     req(!Object.hasOwn(o,'image')||(isRasterImage(o.image)&&o.text.trim().length>0), `${o.id} 的图片须为带替代文本的本地 PNG/JPEG（数据不超过 256000 字符）。`);
@@ -228,9 +236,9 @@ export function proposalFor(model, proposal, task) {
   req(object && Object.keys(edit.set).every(k=>propKeys(object).includes(k)), '提案越界或包含未知字段。');
   const diff = Object.entries(edit.set).filter(([k,v])=>JSON.stringify(object[k])!==JSON.stringify(v)).map(([k,v])=>[k,object[k],v]);
   req(diff.length, '提案没有产生变更。');
-  if(Object.hasOwn(edit.set,'text')&&object.textColors){
+  if(Object.hasOwn(edit.set,'text')&&(object.textColors||object.textWeights)){
     const updated=replaceObjectText(object,edit.set.text);
-    delete object.textColors;
+    for(const key of Object.keys(textRangeFields))if(!Object.hasOwn(updated,key))delete object[key];
     Object.assign(object,updated);
   }
   Object.assign(object,edit.set);
@@ -278,8 +286,10 @@ export function renderSlide(model) {
     }
     const styles = Object.entries(objectStyle(o)).map(([k,v])=>`${k.replace(/[A-Z]/g,l=>'-'+l.toLowerCase())}:${v}`).join(';');
     const content=escape(o.text);
-    const styled=o.textColors?textColorSegments(o).map(({text,color})=>
-      color?`<span style="color:${color}">${escape(text)}</span>`:escape(text)).join(''):content;
+    const styled=o.textColors||o.textWeights?textStyleSegments(o).map(({text,color,bold})=>{
+      const style=[color&&`color:${color}`,bold!==null&&`font-weight:${bold?'700':'400'}`].filter(Boolean).join(';');
+      return style?`<span style="${style}">${escape(text)}</span>`:escape(text);
+    }).join(''):content;
     return `  <div class="object" data-edit-id="${o.id}" style="${escape(styles)}">${o.image?`<img src="${o.image}" alt="${content}" draggable="false" style="${rasterImageCSS}">`:o.href?`<a class="source-link" href="${escape(o.href)}" target="_blank" rel="noopener noreferrer" aria-label="${content}（新标签页打开）" title="新标签页打开">${styled}</a>`:styled}</div>`;
   }).join('\n');
   return `<section class="slide" data-page-id="${model.id}" aria-label="${escape(model.title)}" style="background-color:${model.background}">

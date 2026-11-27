@@ -233,3 +233,5 @@ body.printing #print-deck{display:block;position:absolute;left:-1000000px;top:0}
 #text-color-range{margin-top:6px}
 .text-color-actions{flex-wrap:wrap}
 .text-color-actions input[type=color]{width:40px}
+
+#toggle-range-bold[aria-pressed=true]{background:var(--soft);color:#0b2545}

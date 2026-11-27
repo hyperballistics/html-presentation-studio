@@ -314,6 +314,62 @@ regression('partial-text-color',async({root,open})=>{
   assert.deepEqual(readHTML(html,first).objects.at(-1).textColors,[{start:1,end:3,color:'#c62828'}]);
 });
 
+regression('partial-text-bold',async({root,open})=>{
+  const page=await open();
+  await el(page,'add-text').click();
+  const field=el(page,'object-text'), toggle=el(page,'toggle-range-bold');
+  await field.fill('甲重点乙');
+  assert.equal(await toggle.isEnabled(),true);
+  await field.evaluate(node=>node.setSelectionRange(1,1));
+  await field.press('Shift+ArrowRight');await field.press('Shift+ArrowRight');
+  await toggle.click();
+  const segment=el(page,'slide').locator('.object span').getByText('重点',{exact:true});
+  await segment.waitFor();
+  assert.deepEqual(await segment.evaluate(node=>[getComputedStyle(node).fontWeight,getComputedStyle(node.parentElement).fontWeight]),['700','400']);
+  assert.equal(await toggle.getAttribute('aria-pressed'),'true');
+  if(process.env.STUDIO_BOLD_SCREENSHOT)await page.screenshot({path:process.env.STUDIO_BOLD_SCREENSHOT});
+  await toggle.click();await segment.waitFor({state:'detached'});
+  await el(page,'undo').click();await segment.waitFor();
+  await page.reload();await waitStatus(page,'草稿已自动保存');await segment.waitFor();
+  await el(page,'present').click();
+  assert.equal(await el(page,'present-slide').locator('.object span').getByText('重点').evaluate(node=>getComputedStyle(node).fontWeight),'700');
+  await el(page,'close-present').click();await review(page);await approve(page,200);await waitStatus(page,'与源文件一致');
+  assert.match(await saved(root,first),/甲<span style="font-weight:700">重点<\/span>乙/);
+});
+
+regression('text-style-without-range',async({open})=>{
+  const page=await open();
+  await el(page,'add-text').click();
+  const field=el(page,'object-text'), toggle=el(page,'toggle-range-bold');
+  const select=async(start,end)=>{
+    await field.focus();
+    await field.evaluate((node,[start,end])=>node.setSelectionRange(start,end),[start,end]);
+    await el(page,'text-color-hint').getByText(start===end?/整个文本框/:/选中的文字/).waitFor();
+  };
+  await field.fill('甲重点乙');
+  const box=el(page,'slide').locator('.object[data-edit-id^=text-]');
+  await select(1,3);
+  await el(page,'text-range-color').fill('#c62828');
+  await el(page,'apply-text-color').click();await toggle.click();
+  assert.deepEqual(await box.locator('span').evaluate(node=>[getComputedStyle(node).color,getComputedStyle(node).fontWeight]),['rgb(198, 40, 40)','700']);
+  await select(3,3);
+  await el(page,'text-range-color').fill('#065fa9');
+  await el(page,'apply-text-color').click();
+  assert.deepEqual(await box.locator('span').evaluate(node=>[getComputedStyle(node).color,getComputedStyle(node).fontWeight]),['rgb(6, 95, 169)','700']);
+  await toggle.click();
+  assert.equal(await box.locator('span').count(),0);
+  assert.deepEqual(await box.evaluate(node=>[getComputedStyle(node).color,getComputedStyle(node).fontWeight]),['rgb(6, 95, 169)','700']);
+  await toggle.click();
+  assert.equal(await box.evaluate(node=>getComputedStyle(node).fontWeight),'400');
+  await select(1,3);
+  await page.locator('[data-toggle="bold"]').click();
+  await box.locator('span').waitFor();
+  await select(3,3);
+  await el(page,'swatch-color').fill('#006633');
+  assert.equal(await box.evaluate(node=>getComputedStyle(node).color),'rgb(0, 102, 51)');
+  if(process.env.STUDIO_BOLD_SCREENSHOT)await page.screenshot({path:process.env.STUDIO_BOLD_SCREENSHOT});
+});
+
 const third={...target,id:'p03-browser',title:'跳过本页'};
 const fourth={...target,id:'p04-browser',title:'末页'};
 regression('conditional-export',async({root,open})=>{

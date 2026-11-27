@@ -143,11 +143,12 @@
       <fieldset id="object-fields" hidden><legend class="sr">对象属性</legend>
         <section class="group"><h3 id="object-text-title">文本</h3><textarea id="object-text" aria-label="对象文本" data-prop="text" rows="2" maxlength="2000"></textarea>
           <div id="text-color-range" class="field" hidden>
-            <span id="text-color-hint">在上方选中文字，可单独设置颜色。</span>
+            <span id="text-color-hint">作用范围：整个文本框（选中文字可单独设置）</span>
             <div class="swatch text-color-actions">
-              <input type="color" id="text-range-color" aria-label="选中文字的颜色">
+              <input type="color" id="text-range-color" aria-label="要应用的文字颜色">
               <button type="button" id="apply-text-color">应用颜色</button>
               <button type="button" id="clear-text-color">恢复默认</button>
+              <button type="button" id="toggle-range-bold" aria-pressed="false" disabled>加粗</button>
             </div>
           </div>
           <label id="object-href-row" class="field" hidden>来源链接（HTTPS）<input id="object-href" data-prop="href" type="url" maxlength="2048" placeholder="https://…"></label>

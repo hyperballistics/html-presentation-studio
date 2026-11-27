@@ -1,4 +1,4 @@
-import {defaultFormat,pageFormats,pageSize,defaults,objectStyle,objectCSS,THEME,fontAssets,fontFace,validate,renderHTML,renderDeckHTML,borderDefaults,styleLimits,sides,arrowCSS,anchorPoint,endpointPoint,arrowGeometry,withoutObjects,pdfPageCSS,selectGroups,regroup,setReveal,revealStep,isHexColor,isSourceURL,rasterImageCSS,textColorSegments,setTextColor,replaceObjectText} from './model.mjs';
+import {defaultFormat,pageFormats,pageSize,defaults,objectStyle,objectCSS,THEME,fontAssets,fontFace,validate,renderHTML,renderDeckHTML,borderDefaults,styleLimits,sides,arrowCSS,anchorPoint,endpointPoint,arrowGeometry,withoutObjects,pdfPageCSS,selectGroups,regroup,setReveal,revealStep,isHexColor,isSourceURL,rasterImageCSS,textStyleSegments,setTextColor,textRangeIsBold,setTextBold,replaceObjectText} from './model.mjs';
 import {selectionBounds,rectBetween,boxHits,transformSelection,fitToPage,alignmentUnits,alignSelection} from './selection.mjs';
 const $=id=>document.getElementById(id), all=q=>[...document.querySelectorAll(q)];
 const make=(tag,classes='',text='')=>Object.assign(document.createElement(tag),{className:classes,textContent:text});
@@ -153,9 +153,12 @@ function objectNode(o,edit,objects,size,links) {
       content.title='新标签页打开';content.setAttribute('aria-label',`${o.text}（新标签页打开）`);
       node.append(content);
     }
-    if(o.textColors)for(const {text,color} of textColorSegments(o)){
-      if(!color){content.append(text);continue;}
-      const span=make('span','',text);span.style.color=color;content.append(span);
+    if(o.textColors||o.textWeights)for(const {text,color,bold} of textStyleSegments(o)){
+      if(!color&&bold===null){content.append(text);continue;}
+      const span=make('span','',text);
+      if(color)span.style.color=color;
+      if(bold!==null)span.style.fontWeight=bold?'700':'400';
+      content.append(span);
     }
     else content.textContent=o.text;
   }
@@ -598,7 +601,7 @@ function inspector(skip) {
       b.setAttribute('aria-pressed',mixed?'mixed':String(first[k]));hasMixed||=mixed;
     }
   }
-  syncTextColorControls();
+  syncTextRangeControls();
   $('mixed-style').hidden=!hasMixed;
   toolDisabled('group-selection',!multiple||whole);
   toolDisabled('ungroup-selection',!selectedGroups().length);
@@ -617,8 +620,8 @@ function inspector(skip) {
   refreshStatus();
 }
 const objectText=$('object-text');
-let textColorOwner;
-function textColorSelection() {
+let textRangeOwner;
+function textRangeSelection() {
   const object=active(), {value,selectionStart,selectionEnd}=objectText;
   if(previewSource||object?.type!=='text'||object.text.replace(/\r\n?/g,'\n')!==value||selectionStart===selectionEnd)return null;
   // A textarea normalizes CRLF to LF. Map its selection back to the source string.
@@ -629,29 +632,51 @@ function textColorSelection() {
   }
   return {object,start:offsets[selectionStart],end:offsets[selectionEnd]};
 }
-function syncTextColorControls() {
+function syncTextRangeControls() {
   const object=active(), owner=object?.type==='text'?object.id:null;
-  if(owner!==textColorOwner){
-    textColorOwner=owner;
+  if(owner!==textRangeOwner){
+    textRangeOwner=owner;
     objectText.setSelectionRange(0,0);
   }
-  const range=textColorSelection();
+  const range=textRangeSelection(), editable=!!owner&&!previewSource;
   $('text-color-range').hidden=!owner;
-  $('text-range-color').disabled=!range;
-  $('apply-text-color').disabled=!range;
-  $('clear-text-color').disabled=!range?.object.textColors?.some(({start,end})=>start<range.end&&end>range.start);
+  $('text-color-hint').textContent=range?'作用范围：选中的文字':'作用范围：整个文本框（选中文字可单独设置）';
+  const bold=editable&&(range?textRangeIsBold(object,range.start,range.end):
+    object.text.length?textRangeIsBold(object,0,object.text.length):object.bold);
+  $('toggle-range-bold').disabled=!editable;
+  $('toggle-range-bold').setAttribute('aria-pressed',String(bold));
+  if(editable)$('object-fields').querySelector('[data-toggle="bold"]').setAttribute('aria-pressed',String(bold));
+  $('text-range-color').disabled=!editable;
+  $('apply-text-color').disabled=!editable;
+  $('clear-text-color').disabled=!editable||!object.textColors?.some(({start,end})=>!range||start<range.end&&end>range.start);
 }
-for(const event of ['select','selectionchange','pointerup','keyup','blur'])on('object-text',event,syncTextColorControls);
-function applyTextRangeColor(color) {
-  const range=textColorSelection();
-  if(!range||busy||pointer)return;
-  const {object,start,end}=range, next=setTextColor(object,start,end,color);
-  commit({...model,objects:model.objects.map(item=>item===object?next:item)},'',objectText);
-  objectText.focus({preventScroll:true});
-  announce(color?'已应用选中文字颜色。':'已恢复选中文字的默认颜色。');
+for(const event of ['select','selectionchange','pointerup','keyup','blur'])on('object-text',event,syncTextRangeControls);
+function applyTextStyle(key,value,{restore=false,input=null,refocus=false}={}) {
+  const object=active();
+  if(object?.type!=='text'||previewSource||busy||pointer)return;
+  const range=textRangeSelection(), color=key==='color', field=color?'textColors':'textWeights';
+  let next;
+  if(range){
+    const {start,end}=range;
+    next=color?setTextColor(object,start,end,restore?null:value):setTextBold(object,start,end,value);
+  }else{
+    next=restore?{...object}:{...object,[key]:value};
+    delete next[field];
+  }
+  commit({...model,objects:model.objects.map(item=>item===object?next:item)},input?`${object.id}:${key}`:'',input??objectText);
+  if(refocus&&range)objectText.focus({preventScroll:true});
+  if(!input)announce(`${range?'选中文字':'整个文本框'}：${color?(restore?'已恢复默认颜色。':'已应用颜色。'):(value?'已加粗。':'已取消加粗。')}`);
 }
-action('apply-text-color',()=>applyTextRangeColor($('text-range-color').value));
-action('clear-text-color',()=>applyTextRangeColor(null));
+function toggleTextBold(refocus=false) {
+  const object=active(), range=textRangeSelection();
+  if(object?.type!=='text')return;
+  const bold=range?textRangeIsBold(object,range.start,range.end):
+    object.text.length?textRangeIsBold(object,0,object.text.length):object.bold;
+  applyTextStyle('bold',!bold,{refocus});
+}
+action('apply-text-color',()=>applyTextStyle('color',$('text-range-color').value,{refocus:true}));
+action('clear-text-color',()=>applyTextStyle('color',null,{restore:true,refocus:true}));
+action('toggle-range-bold',()=>toggleTextBold(true));
 function endFields(o) {
   const options=model.objects.filter(n=>n.type!=='arrow');
   for(const k of ends) {
@@ -910,7 +935,10 @@ action('copy-objects',copyObjects);action('paste-objects',pasteCopiedObjects);
 action('raise',()=>mutateOrder(1));action('lower',()=>mutateOrder(-1));action('delete',remove);
 action('paint',()=>{const o=active();if(o&&o.type!=='arrow'){brush=Object.fromEntries(formatKeys.map(k=>[k,o[k]]));inspector();announce('已取格式。选择另一个对象后点击刷格式。');}});
 action('apply-paint',()=>{if(brush&&selection.size&&selectedItems().every(o=>o.type!=='arrow'))update(brush);});
-for(const b of toggles)b.onclick=()=>update({[b.dataset.toggle]:b.getAttribute('aria-pressed')!=='true'});
+for(const b of toggles)b.onclick=()=>{
+  if(b.dataset.toggle==='bold'&&active()?.type==='text'){toggleTextBold(true);return;}
+  update({[b.dataset.toggle]:b.getAttribute('aria-pressed')!=='true'});
+};
 for(const input of props){
   const key=input.dataset.prop, number=input.type==='number'||key==='line';
   const change=()=>{
@@ -1038,6 +1066,7 @@ function applyColor(prop,color,input=null) {
     return false;
   }
   if(prop==='background')commit({...model,background:color},input?'background':'',input);
+  else if(prop==='color'&&active()?.type==='text')applyTextStyle('color',color,{input});
   else update({[prop]:color},input?prop:'',input);
   return true;
 }
@@ -1656,7 +1685,7 @@ function changes(before,after) {
   const oldOrder=order(before,nextIds), newOrder=order(after,previousIds);
   if(oldOrder!==newOrder)lines.push(`对象顺序（底 → 顶）\n  − ${oldOrder}\n  + ${newOrder}`);
   for(const o of before.objects)if(!after.objects.some(n=>n.id===o.id))lines.push(`− 删除 ${o.id}`);
-  for(const o of after.objects){const old=before.objects.find(n=>n.id===o.id); if(!old)lines.push(`+ 新增 ${o.id} · ${o.text||o.type}`);else compare(Object.keys(o),old,o,o.id);}
+  for(const o of after.objects){const old=before.objects.find(n=>n.id===o.id); if(!old)lines.push(`+ 新增 ${o.id} · ${o.text||o.type}`);else compare([...new Set([...Object.keys(old),...Object.keys(o)])],old,o,o.id);}
   return lines.join('\n\n');
 }
 function openReview(title,diff,label,apply) {

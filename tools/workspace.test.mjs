@@ -9,7 +9,7 @@ import {publishHTMLDirectory} from './export-files.mjs';
 import {exportPDF} from './pdf.mjs';
 import {openWorkspace,revision} from './workspace.mjs';
 import {updateContext} from './context.mjs';
-import {proposalFor,renderHTML,renderPDFSource,readHTML,defaults,THEME,arrowGeometry,withoutObject,withoutObjects,fontAssets,validate,selectGroups,regroup,setReveal,revealStep,isHexColor,pageSize,pageFormats,setTextColor,replaceObjectText} from '../workbench/model.mjs';
+import {proposalFor,renderHTML,renderPDFSource,readHTML,defaults,THEME,arrowGeometry,withoutObject,withoutObjects,fontAssets,validate,selectGroups,regroup,setReveal,revealStep,isHexColor,pageSize,pageFormats,setTextColor,setTextBold,textRangeIsBold,replaceObjectText} from '../workbench/model.mjs';
 import {selectionBounds,boxHits,transformSelection,fitToPage,alignSelection} from '../workbench/selection.mjs';
 const id='p01-fixture', section='01-test', folder=`sections/${section}`, name=`${folder}/pages/${id}.html`;
 const original={id,title:'Fixture',background:THEME.paper,notes:'',objects:[{...defaults,id:'hero-title',type:'text',x:70,y:70,text:'测试页'}]};
@@ -55,6 +55,23 @@ test('partial text colors survive projections, shifting edits and range clearing
   for(const range of [{start:2,end:3,color:'#e02040'},{start:1,end:3,color:'red;position:absolute'}]){
     assert.throws(()=>validate({...original,objects:[{...colored,textColors:[range]}]}),/局部文字颜色/);
   }
+});
+
+test('partial bold combines with color without changing surrounding weight',()=>{
+  const object={...original.objects[0],bold:false,text:'甲重点乙'};
+  const colored=setTextColor(object,1,2,'#c62828');
+  const bold=setTextBold(colored,1,3,true);
+  const model={...original,objects:[bold]};
+  const projection=/甲<span style="color:#c62828;font-weight:700">重<\/span><span style="font-weight:700">点<\/span>乙/;
+  assert.match(renderHTML(model),projection);
+  assert.match(renderPDFSource([model],''),projection);
+  assert.deepEqual(readHTML(renderHTML(model),id),model);
+  assert.equal(textRangeIsBold(bold,0,3),false);
+  assert.equal(textRangeIsBold(bold,1,3),true);
+  assert.equal(setTextBold(bold,1,3,false).textWeights,undefined);
+  assert.deepEqual(replaceObjectText(bold,'前甲重点乙').textWeights,[{start:2,end:4,bold:true}]);
+  assert.deepEqual(setTextBold({...object,bold:true},1,3,false).textWeights,[{start:1,end:3,bold:false}]);
+  assert.throws(()=>validate({...model,objects:[{...bold,textWeights:[{start:1,end:3,bold:'700'}]}]}),/局部文字字重/);
 });
 
 test('page formats round-trip, enforce box and endpoint bounds, and preserve mixed PDF paper sizes',()=>{
